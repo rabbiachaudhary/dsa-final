@@ -3,15 +3,51 @@ import { Button } from '@/components/ui/button';
 import { StatCard } from '@/components/ui/stat-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { SessionBadge } from '@/components/ui/session-badge';
-import { mockSessions, mockTimeSlots, mockRooms } from '@/data/mockData';
+import { getCurrentUser, getSessions, getRooms, getTimeSlots } from '@/lib/api';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  
-  const totalStudents = mockSessions.reduce((sum, s) => sum + s.totalStudents, 0);
-  const upcomingSlots = mockTimeSlots.filter(slot => new Date(slot.date) >= new Date());
+
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [timeSlots, setTimeSlots] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  useEffect(() => {
+    getCurrentUser()
+      .then(res => {
+        setUser(res.data);
+        setLoadingUser(false);
+      })
+      .catch(() => {
+        setUser(null);
+        setLoadingUser(false);
+      });
+
+    Promise.all([
+      getSessions(),
+      getRooms(),
+      getTimeSlots()
+    ]).then(([sessionsRes, roomsRes, slotsRes]) => {
+      setSessions(sessionsRes.data || []);
+      setRooms(roomsRes.data || []);
+      setTimeSlots(slotsRes.data || []);
+      setLoadingData(false);
+    }).catch(() => {
+      setSessions([]);
+      setRooms([]);
+      setTimeSlots([]);
+      setLoadingData(false);
+    });
+  }, []);
+
+  const totalStudents = sessions.reduce((sum, s) => sum + (s.totalStudents || 0), 0);
+  const upcomingSlots = timeSlots.filter((slot: any) => new Date(slot.date) >= new Date());
 
   return (
     <div className="p-6 lg:p-8 space-y-8 animate-fade-in">
@@ -25,37 +61,54 @@ const Dashboard = () => {
         </Button>
       </PageHeader>
 
+      {/* User Info */}
+      <div className="mb-4">
+        {loadingUser ? (
+          <div className="text-muted-foreground">Loading user info...</div>
+        ) : user ? (
+          <div className="bg-card border border-border/50 rounded-lg p-4 mb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-semibold text-lg text-foreground">Welcome, {user.name}</div>
+              <div className="text-sm text-muted-foreground">{user.email}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-destructive">Could not load user info.</div>
+        )}
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Sessions"
-          value={mockSessions.length}
+          value={loadingData ? '...' : sessions.length}
           icon={Calendar}
           description="Active exam sessions"
           iconClassName="bg-session-1"
         />
         <StatCard
           title="Total Students"
-          value={totalStudents}
+          value={loadingData ? '...' : totalStudents}
           icon={Users}
           description="Across all sessions"
           iconClassName="bg-session-2"
         />
         <StatCard
           title="Total Rooms"
-          value={mockRooms.length}
+          value={loadingData ? '...' : rooms.length}
           icon={DoorOpen}
-          description={`${mockRooms.reduce((sum, r) => sum + r.capacity, 0)} total capacity`}
+          description={loadingData ? '...' : `${rooms.reduce((sum, r) => sum + ((r.rows && r.columns) ? r.rows * r.columns : 0), 0)} total capacity`}
           iconClassName="bg-session-3"
         />
         <StatCard
           title="Upcoming Slots"
-          value={upcomingSlots.length}
+          value={loadingData ? '...' : upcomingSlots.length}
           icon={Clock}
           description="Scheduled exams"
           iconClassName="bg-session-4"
         />
       </div>
+
 
       {/* Quick Overview Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -68,8 +121,10 @@ const Dashboard = () => {
             </Button>
           </div>
           <div className="divide-y divide-border">
-            {mockTimeSlots.slice(0, 3).map((slot) => {
-              const sessions = mockSessions.filter(s => slot.sessionIds.includes(s.id));
+            {loadingData ? (
+              <div className="p-4 text-muted-foreground">Loading...</div>
+            ) : timeSlots.slice(0, 3).map((slot: any) => {
+              const slotSessions = sessions.filter(s => slot.sessionIds && slot.sessionIds.includes(s.id));
               return (
                 <div key={slot.id} className="p-4 hover:bg-muted/50 transition-colors">
                   <div className="flex items-start justify-between">
@@ -80,7 +135,7 @@ const Dashboard = () => {
                       </p>
                     </div>
                     <div className="flex gap-1.5 flex-wrap justify-end">
-                      {sessions.map(session => (
+                      {slotSessions.map((session: any) => (
                         <SessionBadge key={session.id} colorIndex={session.colorIndex}>
                           {session.name}
                         </SessionBadge>
@@ -102,15 +157,17 @@ const Dashboard = () => {
             </Button>
           </div>
           <div className="divide-y divide-border">
-            {mockSessions.map((session) => (
+            {loadingData ? (
+              <div className="p-4 text-muted-foreground">Loading...</div>
+            ) : sessions.map((session: any) => (
               <div key={session.id} className="p-4 hover:bg-muted/50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full session-${session.colorIndex}`} />
+                    <div className={`w-3 h-3 rounded-full session-${session.colorIndex || 1}`} />
                     <div>
                       <p className="font-medium text-foreground">{session.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {session.sections.length} sections • {session.totalStudents} students
+                        {session.sections ? session.sections.length : 0} sections • {session.totalStudents || 0} students
                       </p>
                     </div>
                   </div>
@@ -132,7 +189,9 @@ const Dashboard = () => {
         </div>
         <div className="p-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-            {mockRooms.map((room) => (
+            {loadingData ? (
+              <div className="col-span-full text-muted-foreground">Loading...</div>
+            ) : rooms.map((room: any) => (
               <div 
                 key={room.id} 
                 className="p-4 rounded-lg border border-border bg-muted/30 hover:bg-muted/50 transition-colors text-center"

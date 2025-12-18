@@ -11,6 +11,13 @@ export const api = axios.create({
 // Auth
 export const login = (data: { email: string; password: string }) => api.post('/auth/login', data);
 export const signup = (data: { name: string; email: string; password: string }) => api.post('/auth/signup', data);
+// Get current user (profile)
+export const getCurrentUser = () => {
+  const token = localStorage.getItem('auth');
+  return api.get('/auth/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
 
 // Sessions
 export const getSessions = () => api.get('/sessions');
