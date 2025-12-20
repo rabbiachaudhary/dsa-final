@@ -24,11 +24,17 @@ export default function SignUp() {
     setError("");
     try {
       const res = await signup({ name, email, password });
-      localStorage.setItem("auth", res.data.token);
-      setIsLoading(false);
-      navigate("/dashboard");
+      if (res.data && res.data.token) {
+        localStorage.setItem("auth", res.data.token);
+        navigate("/dashboard");
+      } else {
+        setError("Invalid response from server");
+      }
     } catch (err: any) {
-      setError(err?.response?.data?.msg || "Signup failed");
+      console.error('Signup error:', err);
+      const errorMsg = err?.response?.data?.msg || err?.message || "Signup failed";
+      setError(errorMsg);
+    } finally {
       setIsLoading(false);
     }
   };

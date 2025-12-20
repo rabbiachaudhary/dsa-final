@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { Plus, ChevronDown, ChevronRight, Users, X } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Users, X, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { SessionBadge } from '@/components/ui/session-badge';
@@ -15,12 +15,14 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { getSessions, createSession } from '@/lib/api';
+import { getSessions, createSession, updateSession, deleteSession, deleteSection, addRollNumbers, uploadPDF } from '@/lib/api';
 import { Session, Section } from '@/types/exam';
 import { toast } from '@/hooks/use-toast';
 
@@ -29,6 +31,7 @@ const Sessions = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [expandedSessions, setExpandedSessions] = useState<string[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [newSession, setNewSession] = useState({
     year: '',
     name: '',
@@ -36,10 +39,37 @@ const Sessions = () => {
   });
   const [loading, setLoading] = useState(false);
 
+  const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
+  const [studentDialogSessionId, setStudentDialogSessionId] = useState<string | null>(null);
+  const [studentDialogSectionId, setStudentDialogSectionId] = useState<string | null>(null);
+  const [studentDialogTab, setStudentDialogTab] = useState<'manual' | 'pdf'>('manual');
+  const [rollNumbersText, setRollNumbersText] = useState('');
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+
   useEffect(() => {
     setLoading(true);
     getSessions()
-      .then(res => setSessions(res.data))
+      .then(res => {
+        const mapped: Session[] = res.data.map((s: any, index: number) => {
+          const sections: Section[] = (s.sections || []).map((sec: any) => ({
+            id: sec._id,
+            name: sec.name,
+            strength: sec.studentCount ?? sec.strength ?? 0,
+          }));
+          const totalStudents = sections.reduce((sum, sec) => sum + (sec.strength || 0), 0);
+
+          return {
+            id: s._id,
+            year: s.year || '',
+            name: s.name,
+            sections,
+            totalStudents,
+            colorIndex: s.colorIndex ?? ((index % 6) + 1),
+          };
+        });
+
+        setSessions(mapped);
+      })
       .catch(() => toast({ title: 'Error', description: 'Failed to load sessions', variant: 'destructive' }))
       .finally(() => setLoading(false));
   }, []);
@@ -77,7 +107,45 @@ const Sessions = () => {
     }));
   };
 
-  const handleAddSession = async () => {
+  const resetForm = () => {
+    setNewSession({ year: '', name: '', sections: [{ name: '', strength: 0 }] });
+    setEditingSessionId(null);
+  };
+
+  const openCreateDialog = () => {
+    resetForm();
+    setIsDialogOpen(true);
+  };
+
+  const openEditDialog = (session: Session) => {
+    setNewSession({
+      year: session.year,
+      name: session.name,
+      sections: session.sections.map(sec => ({ name: sec.name, strength: sec.strength })),
+    });
+    setEditingSessionId(session.id);
+    setIsDialogOpen(true);
+  };
+
+  const mapSessionDoc = (doc: any, colorIndex: number): Session => {
+    const sections: Section[] = (doc.sections || []).map((sec: any) => ({
+      id: sec._id,
+      name: sec.name,
+      strength: sec.studentCount ?? sec.strength ?? 0,
+    }));
+    const totalStudents = sections.reduce((sum, sec) => sum + (sec.strength || 0), 0);
+
+    return {
+      id: doc._id,
+      year: doc.year || '',
+      name: doc.name,
+      sections,
+      totalStudents,
+      colorIndex,
+    };
+  };
+
+  const handleSaveSession = async () => {
     if (!newSession.year || !newSession.name || newSession.sections.some(s => !s.name || s.strength <= 0)) {
       toast({
         title: "Validation Error",
@@ -88,20 +156,165 @@ const Sessions = () => {
     }
     try {
       setLoading(true);
-      const res = await createSession({
+      const payload = {
         year: newSession.year,
         name: newSession.name,
         sections: newSession.sections.map(s => ({ name: s.name, studentCount: s.strength, rollNumbers: [] })),
-      });
-      setSessions(prev => [...prev, res.data]);
-      setNewSession({ year: '', name: '', sections: [{ name: '', strength: 0 }] });
+      };
+
+      if (editingSessionId) {
+        const existing = sessions.find(s => s.id === editingSessionId);
+        const res = await updateSession(editingSessionId, payload);
+        const updated = mapSessionDoc(res.data, existing?.colorIndex ?? 1);
+        setSessions(prev => prev.map(s => (s.id === editingSessionId ? updated : s)));
+        toast({
+          title: "Session Updated",
+          description: `${updated.name} has been updated successfully.`
+        });
+      } else {
+        const res = await createSession(payload);
+        const colorIndex = ((sessions.length % 6) + 1);
+        const created = mapSessionDoc(res.data, colorIndex);
+        setSessions(prev => [...prev, created]);
+        toast({
+          title: "Session Added",
+          description: `${created.name} has been added successfully.`
+        });
+      }
+
+      resetForm();
       setIsDialogOpen(false);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to save session', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSession = async (id: string) => {
+    try {
+      setLoading(true);
+      await deleteSession(id);
+      setSessions(prev => prev.filter(session => session.id !== id));
       toast({
-        title: "Session Added",
-        description: `${res.data.name} has been added successfully.`
+        title: "Session Deleted",
+        description: "The session has been removed successfully."
       });
     } catch {
-      toast({ title: 'Error', description: 'Failed to add session', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to delete session', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSection = async (sessionId: string, sectionId: string) => {
+    try {
+      setLoading(true);
+      const existing = sessions.find(s => s.id === sessionId);
+      const res = await deleteSection(sessionId, sectionId);
+      const updated = mapSessionDoc(res.data, existing?.colorIndex ?? 1);
+      setSessions(prev => prev.map(s => (s.id === sessionId ? updated : s)));
+      toast({
+        title: "Section Deleted",
+        description: "The section has been removed successfully."
+      });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete section', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openStudentDialog = (sessionId: string, sectionId: string) => {
+    setStudentDialogSessionId(sessionId);
+    setStudentDialogSectionId(sectionId);
+    setStudentDialogTab('manual');
+    setRollNumbersText('');
+    setPdfFile(null);
+    setIsStudentDialogOpen(true);
+  };
+
+  const remapSessionsFromResponse = (data: any[]): Session[] => {
+    return data.map((s: any, index: number) => {
+      const sections: Section[] = (s.sections || []).map((sec: any) => ({
+        id: sec._id,
+        name: sec.name,
+        strength: sec.studentCount ?? sec.strength ?? 0,
+      }));
+      const totalStudents = sections.reduce((sum, sec) => sum + (sec.strength || 0), 0);
+
+      return {
+        id: s._id,
+        year: s.year || '',
+        name: s.name,
+        sections,
+        totalStudents,
+        colorIndex: s.colorIndex ?? ((index % 6) + 1),
+      };
+    });
+  };
+
+  const refreshSessions = async () => {
+    const res = await getSessions();
+    const mapped = remapSessionsFromResponse(res.data);
+    setSessions(mapped);
+  };
+
+  const handleSaveManualRollNumbers = async () => {
+    if (!studentDialogSessionId || !studentDialogSectionId) return;
+    const raw = rollNumbersText.split(/[\s,;\n\r]+/).map(r => r.trim()).filter(Boolean);
+    if (raw.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please enter at least one roll number.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      setLoading(true);
+      await addRollNumbers(studentDialogSessionId, studentDialogSectionId, raw);
+      await refreshSessions();
+      toast({
+        title: 'Roll Numbers Added',
+        description: `${raw.length} roll numbers were added to the section.`,
+      });
+      setIsStudentDialogOpen(false);
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to add roll numbers.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUploadPdf = async () => {
+    if (!studentDialogSessionId || !studentDialogSectionId || !pdfFile) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select a PDF file to upload.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      setLoading(true);
+      await uploadPDF(studentDialogSessionId, studentDialogSectionId, pdfFile);
+      await refreshSessions();
+      toast({
+        title: 'PDF Processed',
+        description: 'Roll numbers were extracted from the PDF and added.',
+      });
+      setIsStudentDialogOpen(false);
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to upload or parse PDF.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -115,14 +328,14 @@ const Sessions = () => {
       >
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2" onClick={openCreateDialog}>
               <Plus className="w-4 h-4" />
-              Add Session
+              {editingSessionId ? 'Edit Session' : 'Add Session'}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Add New Session</DialogTitle>
+              <DialogTitle>{editingSessionId ? 'Edit Session' : 'Add New Session'}</DialogTitle>
               <DialogDescription>
                 Create a new exam session with multiple sections.
               </DialogDescription>
@@ -190,8 +403,18 @@ const Sessions = () => {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddSession}>Add Session</Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  resetForm();
+                  setIsDialogOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveSession}>
+                {editingSessionId ? 'Save Changes' : 'Add Session'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -225,14 +448,38 @@ const Sessions = () => {
                       <p className="text-sm text-muted-foreground">{session.year}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
+                  <div className="flex items-center gap-4">
+                    <div className="text-right mr-2">
                       <p className="text-sm font-medium text-foreground">{session.sections.length} sections</p>
                       <p className="text-sm text-muted-foreground">{session.totalStudents} students</p>
                     </div>
                     <SessionBadge colorIndex={session.colorIndex} variant="solid">
                       Active
                     </SessionBadge>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditDialog(session);
+                        }}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSession(session.id);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CollapsibleTrigger>
@@ -251,7 +498,25 @@ const Sessions = () => {
                             <Users className="w-4 h-4 text-muted-foreground" />
                             <span className="font-medium text-foreground">{section.name}</span>
                           </div>
-                          <span className="text-sm text-muted-foreground">{section.strength} students</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">{section.strength} students</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => openStudentDialog(session.id, section.id)}
+                            >
+                              Add Students
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDeleteSection(session.id, section.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -262,6 +527,64 @@ const Sessions = () => {
           );
         })}
       </div>
+
+      {/* Student (Roll Numbers) Dialog */}
+      <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Students to Section</DialogTitle>
+            <DialogDescription>
+              Choose how you want to add roll numbers for this section.
+            </DialogDescription>
+          </DialogHeader>
+          <Tabs value={studentDialogTab} onValueChange={(v) => setStudentDialogTab(v as 'manual' | 'pdf')}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+              <TabsTrigger value="pdf">Upload PDF</TabsTrigger>
+            </TabsList>
+            <TabsContent value="manual" className="space-y-3">
+              <Label htmlFor="rollnos">Roll Numbers</Label>
+              <Textarea
+                id="rollnos"
+                placeholder="Enter roll numbers separated by commas, spaces, or new lines"
+                value={rollNumbersText}
+                onChange={(e) => setRollNumbersText(e.target.value)}
+                className="min-h-[120px]"
+              />
+            </TabsContent>
+            <TabsContent value="pdf" className="space-y-3">
+              <Label htmlFor="pdf">Upload PDF</Label>
+              <Input
+                id="pdf"
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setPdfFile(file);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                The system will extract roll numbers automatically from the PDF using pattern matching.
+              </p>
+            </TabsContent>
+          </Tabs>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsStudentDialogOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            {studentDialogTab === 'manual' ? (
+              <Button onClick={handleSaveManualRollNumbers}>Save Roll Numbers</Button>
+            ) : (
+              <Button onClick={handleUploadPdf}>Upload PDF</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

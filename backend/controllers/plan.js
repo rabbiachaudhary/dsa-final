@@ -1,33 +1,64 @@
 const express = require('express');
 const Plan = require('../models/Plan');
+const { generatePlansForTimeSlot } = require('../lib/planEngine');
+const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all plans
+// All routes require authentication
+router.use(authMiddleware);
+
+// Get all plans for the logged-in user
 router.get('/', async (req, res) => {
   try {
-    const plans = await Plan.find().populate('timeSlot');
+    const plans = await Plan.find({ user: req.user.id }).populate('timeSlot');
     res.json(plans);
   } catch (err) {
     res.status(500).send('Server error');
   }
 });
 
-// Create plan (placeholder, logic to be implemented)
-router.post('/', async (req, res) => {
+// Generate plans for a given time slot and rooms (DSA-based engine)
+router.post('/generate', async (req, res) => {
   try {
-    const plan = new Plan(req.body);
-    await plan.save();
-    res.json(plan);
+    const { timeSlotId, roomIds } = req.body;
+    console.log('POST /generate called with:', { timeSlotId, roomIds, user: req.user.id });
+    if (!timeSlotId || !Array.isArray(roomIds) || roomIds.length === 0) {
+      console.error('Missing timeSlotId or roomIds');
+      return res.status(400).json({ msg: 'timeSlotId and roomIds[] are required' });
+    }
+
+    const seatingPlans = await generatePlansForTimeSlot(timeSlotId, roomIds, req.user.id);
+
+    // Optionally persist one aggregate Plan document with full arrangement
+    const planDoc = new Plan({
+      timeSlot: timeSlotId,
+      arrangement: {
+        rooms: seatingPlans,
+      },
+      user: req.user.id,
+    });
+    await planDoc.save();
+
+    res.json({
+      plans: seatingPlans,
+      planId: planDoc._id,
+    });
   } catch (err) {
-    res.status(500).send('Server error');
+    console.error('Error generating plans:', err && err.stack ? err.stack : err);
+    const message = err instanceof Error ? err.message : 'Failed to generate plans';
+    // If it's a capacity error or validation error, send 400
+    if (message.startsWith('Not enough seats')) {
+      return res.status(400).json({ msg: message });
+    }
+    res.status(500).json({ msg: message });
   }
 });
 
-// Get plan by id
+// Get plan by id (only if owned by user)
 router.get('/:id', async (req, res) => {
   try {
-    const plan = await Plan.findById(req.params.id).populate('timeSlot');
+    const plan = await Plan.findOne({ _id: req.params.id, user: req.user.id }).populate('timeSlot');
     if (!plan) return res.status(404).json({ msg: 'Plan not found' });
     res.json(plan);
   } catch (err) {
@@ -35,10 +66,14 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Update plan
+// Update plan (only if owned by user)
 router.put('/:id', async (req, res) => {
   try {
-    const plan = await Plan.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const plan = await Plan.findOneAndUpdate(
+      { _id: req.params.id, user: req.user.id },
+      req.body,
+      { new: true }
+    );
     if (!plan) return res.status(404).json({ msg: 'Plan not found' });
     res.json(plan);
   } catch (err) {
@@ -46,10 +81,10 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete plan
+// Delete plan (only if owned by user)
 router.delete('/:id', async (req, res) => {
   try {
-    const plan = await Plan.findByIdAndDelete(req.params.id);
+    const plan = await Plan.findOneAndDelete({ _id: req.params.id, user: req.user.id });
     if (!plan) return res.status(404).json({ msg: 'Plan not found' });
     res.json({ msg: 'Plan deleted' });
   } catch (err) {

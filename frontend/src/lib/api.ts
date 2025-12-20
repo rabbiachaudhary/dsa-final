@@ -8,6 +8,36 @@ export const api = axios.create({
   withCredentials: false,
 });
 
+// Add auth token to all requests (except auth routes)
+api.interceptors.request.use(
+  (config) => {
+    // Don't add token for login/signup routes
+    if (config.url?.includes('/auth/login') || config.url?.includes('/auth/signup')) {
+      return config;
+    }
+    const token = localStorage.getItem('auth');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Handle 401 errors - redirect to login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !error.config.url?.includes('/auth/')) {
+      localStorage.removeItem('auth');
+      window.location.href = '/signin';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Auth
 export const login = (data: { email: string; password: string }) => api.post('/auth/login', data);
 export const signup = (data: { name: string; email: string; password: string }) => api.post('/auth/signup', data);
@@ -65,6 +95,8 @@ export const getPlans = () => api.get('/plans');
 export const createPlan = (data: any) => api.post('/plans', data);
 export const updatePlan = (id: string, data: any) => api.put(`/plans/${id}`, data);
 export const deletePlan = (id: string) => api.delete(`/plans/${id}`);
+export const generatePlans = (data: { timeSlotId: string; roomIds: string[] }) =>
+  api.post('/plans/generate', data);
 
 // Capacity check
 export const checkCapacity = (sessionIds: string[]) => api.post('/capacity/check', { sessionIds });

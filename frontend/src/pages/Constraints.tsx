@@ -22,7 +22,12 @@ import { Button } from '@/components/ui/button';
 
 
 const Constraints = () => {
-  const [constraints, setConstraints] = useState<any>({});
+  const [constraints, setConstraints] = useState<any>({
+    alternateSessionsEnabled: false,
+    noAdjacentSameSession: true,
+    fillOrder: 'row-wise',
+    randomShuffle: false,
+  });
   const [loading, setLoading] = useState(false);
   const [constraintId, setConstraintId] = useState<string | null>(null);
 
@@ -31,8 +36,18 @@ const Constraints = () => {
     getConstraints()
       .then(res => {
         if (res.data.length > 0) {
-          setConstraints(res.data[0]);
-          setConstraintId(res.data[0]._id);
+          const doc = res.data[0];
+          setConstraintId(doc._id);
+          // Map backend shape -> UI shape
+          setConstraints({
+            alternateSessionsEnabled: !!doc.alternateSessionsEnabled,
+            noAdjacentSameSession:
+              typeof doc.noAdjacentSameSession === 'boolean'
+                ? doc.noAdjacentSameSession
+                : !doc.allowAdjacentSameSession,
+            fillOrder: doc.fillOrder === 'column' ? 'column-wise' : 'row-wise',
+            randomShuffle: !!doc.randomShuffle || doc.rollNoOrder === 'random',
+          });
         }
       })
       .catch(() => toast({ title: 'Error', description: 'Failed to load constraints', variant: 'destructive' }))
@@ -42,10 +57,21 @@ const Constraints = () => {
   const handleSave = async () => {
     setLoading(true);
     try {
+      // Map UI shape -> backend shape
+      const payload = {
+        alternateSessionsEnabled: constraints.alternateSessionsEnabled,
+        noAdjacentSameSession: constraints.noAdjacentSameSession,
+        allowAdjacentSameSession: !constraints.noAdjacentSameSession,
+        fillOrder: constraints.fillOrder === 'column-wise' ? 'column' : 'row',
+        rollNoOrder: constraints.randomShuffle ? 'random' : 'sequential',
+        randomShuffle: constraints.randomShuffle,
+      };
+
       if (constraintId) {
-        await updateConstraint(constraintId, constraints);
+        const res = await updateConstraint(constraintId, payload);
+        setConstraintId(res.data._id);
       } else {
-        const res = await createConstraint(constraints);
+        const res = await createConstraint(payload);
         setConstraintId(res.data._id);
       }
       toast({
@@ -115,7 +141,7 @@ const Constraints = () => {
           <Switch
             checked={constraints.alternateSessionsEnabled}
             onCheckedChange={(checked) => 
-              setConstraints(prev => ({ ...prev, alternateSessionsEnabled: checked }))
+              setConstraints((prev: any) => ({ ...prev, alternateSessionsEnabled: checked }))
             }
           />
         </ConstraintCard>
@@ -129,7 +155,7 @@ const Constraints = () => {
           <Switch
             checked={constraints.noAdjacentSameSession}
             onCheckedChange={(checked) => 
-              setConstraints(prev => ({ ...prev, noAdjacentSameSession: checked }))
+              setConstraints((prev: any) => ({ ...prev, noAdjacentSameSession: checked }))
             }
           />
         </ConstraintCard>
@@ -143,7 +169,7 @@ const Constraints = () => {
           <Select
             value={constraints.fillOrder}
             onValueChange={(value: 'row-wise' | 'column-wise') =>
-              setConstraints(prev => ({ ...prev, fillOrder: value }))
+              setConstraints((prev: any) => ({ ...prev, fillOrder: value }))
             }
           >
             <SelectTrigger className="w-40">
@@ -165,7 +191,7 @@ const Constraints = () => {
           <Switch
             checked={constraints.randomShuffle}
             onCheckedChange={(checked) => 
-              setConstraints(prev => ({ ...prev, randomShuffle: checked }))
+              setConstraints((prev: any) => ({ ...prev, randomShuffle: checked }))
             }
           />
         </ConstraintCard>

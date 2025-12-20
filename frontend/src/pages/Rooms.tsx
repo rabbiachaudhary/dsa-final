@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { Plus, DoorOpen, Grid3X3 } from 'lucide-react';
+import { Plus, DoorOpen, Grid3X3, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { getRooms, createRoom } from '@/lib/api';
+import { getRooms, createRoom, updateRoom, deleteRoom } from '@/lib/api';
 import { Room } from '@/types/exam';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 const Rooms = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [newRoom, setNewRoom] = useState({
     name: '',
     rows: 4,
@@ -38,7 +39,23 @@ const Rooms = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleAddRoom = async () => {
+  const resetForm = () => {
+    setNewRoom({ name: '', rows: 4, columns: 6 });
+    setEditingRoomId(null);
+  };
+
+  const openCreateDialog = () => {
+    resetForm();
+    setIsDialogOpen(true);
+  };
+
+  const openEditDialog = (room: Room) => {
+    setNewRoom({ name: room.name, rows: room.rows, columns: room.columns });
+    setEditingRoomId(room.id);
+    setIsDialogOpen(true);
+  };
+
+  const handleSaveRoom = async () => {
     if (!newRoom.name || newRoom.rows <= 0 || newRoom.columns <= 0) {
       toast({
         title: "Validation Error",
@@ -49,20 +66,54 @@ const Rooms = () => {
     }
     try {
       setLoading(true);
-      const res = await createRoom({
+      const payload = {
         name: newRoom.name,
         rows: newRoom.rows,
         columns: newRoom.columns,
-      });
-      setRooms(prev => [...prev, { ...res.data, capacity: res.data.rows * res.data.columns, id: res.data._id }]);
-      setNewRoom({ name: '', rows: 4, columns: 6 });
+      };
+
+      if (editingRoomId) {
+        const res = await updateRoom(editingRoomId, payload);
+        setRooms(prev =>
+          prev.map(room =>
+            room.id === editingRoomId
+              ? { ...res.data, capacity: res.data.rows * res.data.columns, id: res.data._id }
+              : room
+          )
+        );
+        toast({
+          title: "Room Updated",
+          description: `${res.data.name} has been updated successfully.`
+        });
+      } else {
+        const res = await createRoom(payload);
+        setRooms(prev => [...prev, { ...res.data, capacity: res.data.rows * res.data.columns, id: res.data._id }]);
+        toast({
+          title: "Room Added",
+          description: `${res.data.name} has been added successfully.`
+        });
+      }
+
+      resetForm();
       setIsDialogOpen(false);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to save room', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRoom = async (id: string) => {
+    try {
+      setLoading(true);
+      await deleteRoom(id);
+      setRooms(prev => prev.filter(room => room.id !== id));
       toast({
-        title: "Room Added",
-        description: `${res.data.name} has been added successfully.`
+        title: "Room Deleted",
+        description: "The room has been removed successfully."
       });
     } catch {
-      toast({ title: 'Error', description: 'Failed to add room', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to delete room', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -113,14 +164,14 @@ const Rooms = () => {
       >
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2" onClick={openCreateDialog}>
               <Plus className="w-4 h-4" />
-              Add Room
+              {editingRoomId ? 'Edit Room' : 'Add Room'}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Add New Room</DialogTitle>
+              <DialogTitle>{editingRoomId ? 'Edit Room' : 'Add New Room'}</DialogTitle>
               <DialogDescription>
                 Define the room layout by specifying rows and columns.
               </DialogDescription>
@@ -175,8 +226,18 @@ const Rooms = () => {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddRoom}>Add Room</Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  resetForm();
+                  setIsDialogOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveRoom}>
+                {editingRoomId ? 'Save Changes' : 'Add Room'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -193,9 +254,29 @@ const Rooms = () => {
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                 <DoorOpen className="w-6 h-6 text-primary" />
               </div>
-              <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">
-                <Grid3X3 className="w-3 h-3" />
-                {room.rows} × {room.columns}
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">
+                  <Grid3X3 className="w-3 h-3" />
+                  {room.rows} × {room.columns}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onClick={() => openEditDialog(room)}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleDeleteRoom(room.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </div>
             

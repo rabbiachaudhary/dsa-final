@@ -125,13 +125,24 @@ const Dashboard = () => {
               <div className="p-4 text-muted-foreground">Loading...</div>
             ) : timeSlots.slice(0, 3).map((slot: any) => {
               const slotSessions = sessions.filter(s => slot.sessionIds && slot.sessionIds.includes(s.id));
+
+              // Safely derive a display date from either slot.date or slot.time
+              let displayDate = '—';
+              const rawDate = slot.date || (typeof slot.time === 'string' ? slot.time.split(' ')[0] : null);
+              if (rawDate) {
+                const d = new Date(rawDate);
+                if (!isNaN(d.getTime())) {
+                  displayDate = format(d, 'MMM d, yyyy');
+                }
+              }
+
               return (
-                <div key={slot.id} className="p-4 hover:bg-muted/50 transition-colors">
+                <div key={slot.id || slot._id} className="p-4 hover:bg-muted/50 transition-colors">
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
-                      <p className="font-medium text-foreground">{slot.name}</p>
+                      <p className="font-medium text-foreground">{slot.name || slot.time}</p>
                       <p className="text-sm text-muted-foreground">
-                        {format(new Date(slot.date), 'MMM d, yyyy')} • {slot.startTime} - {slot.endTime}
+                        {displayDate} • {slot.startTime || ''} {slot.endTime ? `- ${slot.endTime}` : ''}
                       </p>
                     </div>
                     <div className="flex gap-1.5 flex-wrap justify-end">

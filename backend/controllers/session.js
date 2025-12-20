@@ -1,12 +1,16 @@
 const express = require('express');
 const Session = require('../models/Session');
+const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all sessions
+// All routes require authentication
+router.use(authMiddleware);
+
+// Get all sessions for the logged-in user
 router.get('/', async (req, res) => {
   try {
-    const sessions = await Session.find();
+    const sessions = await Session.find({ user: req.user.id });
     res.json(sessions);
   } catch (err) {
     res.status(500).send('Server error');
@@ -16,7 +20,7 @@ router.get('/', async (req, res) => {
 // Create session
 router.post('/', async (req, res) => {
   try {
-    const session = new Session(req.body);
+    const session = new Session({ ...req.body, user: req.user.id });
     await session.save();
     res.json(session);
   } catch (err) {
@@ -24,10 +28,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Get session by id
+// Get session by id (only if owned by user)
 router.get('/:id', async (req, res) => {
   try {
-    const session = await Session.findById(req.params.id);
+    const session = await Session.findOne({ _id: req.params.id, user: req.user.id });
     if (!session) return res.status(404).json({ msg: 'Session not found' });
     res.json(session);
   } catch (err) {
@@ -35,10 +39,14 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Update session
+// Update session (only if owned by user)
 router.put('/:id', async (req, res) => {
   try {
-    const session = await Session.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const session = await Session.findOneAndUpdate(
+      { _id: req.params.id, user: req.user.id },
+      req.body,
+      { new: true }
+    );
     if (!session) return res.status(404).json({ msg: 'Session not found' });
     res.json(session);
   } catch (err) {
@@ -46,10 +54,10 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete session
+// Delete session (only if owned by user)
 router.delete('/:id', async (req, res) => {
   try {
-    const session = await Session.findByIdAndDelete(req.params.id);
+    const session = await Session.findOneAndDelete({ _id: req.params.id, user: req.user.id });
     if (!session) return res.status(404).json({ msg: 'Session not found' });
     res.json({ msg: 'Session deleted' });
   } catch (err) {

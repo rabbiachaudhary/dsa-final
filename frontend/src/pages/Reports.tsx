@@ -1,7 +1,12 @@
 
 import { useState, useEffect } from 'react';
+import { Users, DoorOpen, Clock, FileText, Calendar, Download } from 'lucide-react';
 import { getSessions, getTimeSlots, getRooms } from '@/lib/api';
 import { format } from 'date-fns';
+import { PageHeader } from '@/components/ui/page-header';
+import { Button } from '@/components/ui/button';
+import { SessionBadge } from '@/components/ui/session-badge';
+import { toast } from '@/hooks/use-toast';
 
 const Reports = () => {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -43,6 +48,111 @@ const Reports = () => {
       formats: ['PDF', 'Excel']
     },
   ];
+
+  const downloadFile = (content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportSessionsCsv = () => {
+    if (sessions.length === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'No sessions available to export.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const header = ['Session', 'Year', 'Sections', 'TotalStudents'];
+    const rows = [header.join(',')];
+    sessions.forEach((s: any) => {
+      const sections = s.sections || [];
+      const total = s.totalStudents || sections.reduce((sum: number, sec: any) => sum + (sec.studentCount || 0), 0);
+      rows.push([
+        `"${s.name}"`,
+        `"${s.year || ''}"`,
+        sections.length,
+        total,
+      ].join(','));
+    });
+    downloadFile(rows.join('\n'), 'sessions-report.csv', 'text/csv;charset=utf-8;');
+    toast({ title: 'Exported', description: 'Sessions report exported as CSV.' });
+  };
+
+  const exportRoomsCsv = () => {
+    if (rooms.length === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'No rooms available to export.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const header = ['Room', 'Rows', 'Columns', 'Capacity'];
+    const rows = [header.join(',')];
+    rooms.forEach((r: any) => {
+      rows.push([
+        `"${r.name}"`,
+        r.rows,
+        r.columns,
+        r.capacity || (r.rows && r.columns ? r.rows * r.columns : ''),
+      ].join(','));
+    });
+    downloadFile(rows.join('\n'), 'rooms-report.csv', 'text/csv;charset=utf-8;');
+    toast({ title: 'Exported', description: 'Rooms report exported as CSV.' });
+  };
+
+  const exportScheduleCsv = () => {
+    if (timeSlots.length === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'No time slots available to export.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const header = ['TimeSlot', 'DateTime', 'Sessions'];
+    const rows = [header.join(',')];
+    timeSlots.forEach((slot: any) => {
+      const slotSessions = sessions.filter(s => (slot.sessions || slot.sessionIds || []).includes(s._id || s.id));
+      const names = slotSessions.map(s => s.name).join(' | ');
+      const dateString = slot.date ? format(new Date(slot.date), 'yyyy-MM-dd') : '';
+      rows.push([
+        `"${slot.name || slot.time}"`,
+        `"${dateString}"`,
+        `"${names}"`,
+      ].join(','));
+    });
+    downloadFile(rows.join('\n'), 'schedule-report.csv', 'text/csv;charset=utf-8;');
+    toast({ title: 'Exported', description: 'Schedule report exported as CSV.' });
+  };
+
+  const handleReportClick = (title: string, fmt: string) => {
+    const lower = fmt.toLowerCase();
+    if (lower === 'pdf') {
+      // Use browser print dialog; user can choose "Save as PDF"
+      window.print();
+      return;
+    }
+    // Excel -> CSV exports
+    if (title.includes('Session-wise')) {
+      exportSessionsCsv();
+    } else if (title.includes('Room Allocation')) {
+      exportRoomsCsv();
+    } else if (title.includes('Time Slot Schedule')) {
+      exportScheduleCsv();
+    } else if (title.includes('Seating Arrangement')) {
+      // Reuse schedule CSV as a basic seating arrangement summary
+      exportScheduleCsv();
+    }
+  };
   return (
     <div className="p-6 lg:p-8 space-y-6 animate-fade-in">
       <PageHeader 
@@ -112,7 +222,13 @@ const Reports = () => {
                 <p className="text-sm text-muted-foreground mb-3">{report.description}</p>
                 <div className="flex gap-2">
                   {report.formats.map(fmt => (
-                    <Button key={fmt} variant="outline" size="sm" className="gap-1.5">
+                    <Button
+                      key={fmt}
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => handleReportClick(report.title, fmt)}
+                    >
                       <Download className="w-3.5 h-3.5" />
                       {fmt}
                     </Button>
@@ -153,7 +269,12 @@ const Reports = () => {
                       </div>
                     </td>
                     <td className="p-4">
-                      <Button variant="ghost" size="sm" className="gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={exportScheduleCsv}
+                      >
                         <Download className="w-4 h-4" />
                         Export
                       </Button>

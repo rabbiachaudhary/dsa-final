@@ -29,11 +29,17 @@ export default function SignIn() {
     setError("");
     try {
       const res = await login({ email, password });
-      localStorage.setItem("auth", res.data.token);
-      setIsLoading(false);
-      navigate("/dashboard");
+      if (res.data && res.data.token) {
+        localStorage.setItem("auth", res.data.token);
+        navigate("/dashboard");
+      } else {
+        setError("Invalid response from server");
+      }
     } catch (err: any) {
-      setError(err?.response?.data?.msg || "Invalid email or password");
+      console.error('Login error:', err);
+      const errorMsg = err?.response?.data?.msg || err?.message || "Invalid email or password";
+      setError(errorMsg);
+    } finally {
       setIsLoading(false);
     }
   };

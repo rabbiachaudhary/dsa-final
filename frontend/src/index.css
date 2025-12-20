@@ -127,6 +127,56 @@
   }
 }
 
+@media print {
+  /* Hide UI chrome when printing */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Hide sidebar and navigation */
+  aside,
+  nav,
+  header,
+  .sidebar,
+  [class*="sidebar"],
+  [class*="Sidebar"] {
+    display: none !important;
+  }
+
+  /* Hide all buttons and controls */
+  button,
+  .no-print,
+  [class*="Button"]:not(.print-keep) {
+    display: none !important;
+  }
+
+  /* Full width for print content */
+  body,
+  main {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Each room block should start on a new page */
+  .print-page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  /* Print-friendly spacing */
+  .print-page-break {
+    margin: 0;
+    padding: 20px;
+  }
+
+  /* Ensure content fits on page */
+  * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
 /* Session color utilities */
 .session-1 { background-color: hsl(var(--session-1)); }
 .session-2 { background-color: hsl(var(--session-2)); }
