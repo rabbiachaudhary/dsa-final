@@ -1,6 +1,7 @@
 const express = require('express');
 const Plan = require('../models/Plan');
 const { generatePlansForTimeSlot } = require('../lib/planEngine');
+const { generateSeatingPlanPDF } = require('../lib/pdfGenerator');
 const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
@@ -89,6 +90,31 @@ router.delete('/:id', async (req, res) => {
     res.json({ msg: 'Plan deleted' });
   } catch (err) {
     res.status(500).send('Server error');
+  }
+});
+
+// Generate and download PDF for a plan
+// GET /api/plans/:id/pdf
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const plan = await Plan.findOne({ _id: req.params.id, user: req.user.id });
+    if (!plan) {
+      return res.status(404).json({ msg: 'Plan not found' });
+    }
+
+    // Generate PDF buffer
+    const pdfBuffer = await generateSeatingPlanPDF(plan, req.user.id);
+
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="seating-plan-${plan._id}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send PDF buffer
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Error generating PDF:', err);
+    res.status(500).json({ msg: err.message || 'Failed to generate PDF' });
   }
 });
 

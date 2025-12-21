@@ -3,6 +3,7 @@ const Session = require('../models/Session');
 const Room = require('../models/Room');
 const Constraint = require('../models/Constraint');
 const { Queue, PriorityQueue, SeatGrid } = require('./dsa');
+const { parseSessionInfo } = require('./pdfGenerator');
 
 // Helper type creator for student tokens
 function createStudentToken(sessionId, sectionId, rollNo) {
@@ -157,6 +158,13 @@ async function getConstraints(userId) {
  * Generate seating plans for a given timeslot and set of rooms.
  * Returns an array shaped for the frontend SeatingPlan type:
  * [{ id, timeSlotId, roomId, seats: Seat[][], generatedAt }]
+ * 
+ * Registration Number Logic:
+ * - Format: SESSION-DEPT-ROLLNO (e.g., 2024-CS-01)
+ * - Uses a single global roll number counter across all sections
+ * - Section A starts from roll number 1
+ * - Section B continues from the next number (no reset)
+ * - Roll numbers are assigned sequentially as students are seated
  */
 async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
     console.log('generatePlansForTimeSlot called with:', { timeSlotId, roomIds, userId });
@@ -182,6 +190,16 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
   if (userSessions.length !== sessionIds.length) {
     throw new Error('Some sessions do not belong to the user');
   }
+
+  // Extract session info for registration number format
+  // Use first session's name to determine year and department
+  // All sessions in a timeslot should use the same format
+  const sessionInfo = parseSessionInfo(userSessions[0]?.name || '');
+  const { year, dept } = sessionInfo;
+
+  // Global roll number counter - starts at 1, increments for each student seated
+  // This ensures continuous numbering across all sections
+  let globalRollNumber = 1;
 
   const pool = await buildSessionPool(sessionIds, constraints);
   const totalStudents = pool.totalStudents;
@@ -233,6 +251,16 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
       seat.sessionId = token.sessionId;
       seat.sectionId = token.sectionId;
       seat.studentId = token.rollNo;
+      
+      // Generate registration number: SESSION-DEPT-ROLLNO
+      // Format roll number with zero-padding (e.g., 01, 02, ..., 10, 11)
+      const rollNoStr = globalRollNumber.toString().padStart(2, '0');
+      seat.registrationNumber = `${year}-${dept}-${rollNoStr}`;
+      
+      // Increment global counter for next student
+      // This ensures continuous numbering across sections
+      globalRollNumber++;
+      
       seat.isEmpty = false;
     }
 
@@ -243,6 +271,7 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
         sessionId: seat.sessionId,
         sectionId: seat.sectionId,
         studentId: seat.studentId,
+        registrationNumber: seat.registrationNumber || null, // Include registration number
         isEmpty: seat.isEmpty,
       }))
     );
