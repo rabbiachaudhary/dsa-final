@@ -18,7 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { getSessions, getTimeSlots, getRooms, generatePlans } from '@/lib/api';
+import { getSessions, getTimeSlots, getRooms, generatePlans, api } from '@/lib/api';
 import { Seat, SeatingPlan, Session, TimeSlot, Room } from '@/types/exam';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -29,6 +29,7 @@ const Generate = () => {
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
   const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
   const [generatedPlans, setGeneratedPlans] = useState<SeatingPlan[]>([]);
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null); // Store planId from backend
   const [isGenerating, setIsGenerating] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
@@ -84,20 +85,59 @@ const Generate = () => {
       });
       return;
     }
+    
+    // Enhanced logging to debug API call
+    console.log('=== Frontend: generateSeatingPlan called ===');
+    console.log('selectedTimeSlot:', selectedTimeSlot);
+    console.log('selectedTimeSlot type:', typeof selectedTimeSlot);
+    console.log('selectedRooms:', selectedRooms);
+    console.log('selectedRooms type:', typeof selectedRooms);
+    console.log('Is selectedRooms array?', Array.isArray(selectedRooms));
+    console.log('selectedRooms length:', selectedRooms.length);
+    
+    const payload = {
+      timeSlotId: selectedTimeSlot,
+      roomIds: selectedRooms,
+    };
+    
+    console.log('Payload being sent:', JSON.stringify(payload, null, 2));
+    console.log('Payload keys:', Object.keys(payload));
+    
     try {
       setIsGenerating(true);
-      const res = await generatePlans({
-        timeSlotId: selectedTimeSlot,
-        roomIds: selectedRooms,
-      });
+      console.log('Making API call to /api/plans/generate...');
+      
+      const res = await generatePlans(payload);
+      
+      console.log('✓ API call successful!');
+      console.log('Response status:', res.status);
+      console.log('Response data:', res.data);
+      
       const plans: SeatingPlan[] = res.data.plans;
+      const planId = res.data.planId; // Get planId from backend response
+      
+      console.log('Plans received:', plans);
+      console.log('Plans count:', plans.length);
+      console.log('Plan ID from backend:', planId);
+      
       setGeneratedPlans(plans);
+      setCurrentPlanId(planId); // Store planId for PDF download
+      
       toast({
         title: "Seating Plan Generated",
         description: `Generated seating for ${plans.length} room(s).`
       });
     } catch (err: any) {
-      const message = err?.response?.data?.msg || "Failed to generate seating plan";
+      console.error('✗ API call failed!');
+      console.error('Error object:', err);
+      console.error('Error response:', err?.response);
+      console.error('Error status:', err?.response?.status);
+      console.error('Error data:', err?.response?.data);
+      console.error('Error message:', err?.message);
+      
+      const message = err?.response?.data?.msg || err?.message || "Failed to generate seating plan";
+      console.error('Final error message:', message);
+      
       toast({
         title: "Error",
         description: message,
@@ -179,9 +219,9 @@ const Generate = () => {
   };
 
   const handleDownloadPdf = async () => {
-
-    // Debug logs to diagnose blank PDF issue
+    console.log('=== Frontend: handleDownloadPdf called ===');
     console.log('generatedPlans:', generatedPlans);
+    console.log('currentPlanId:', currentPlanId);
     console.log('rooms:', rooms);
     console.log('sessions:', sessions);
 
@@ -194,196 +234,56 @@ const Generate = () => {
       return;
     }
 
+    if (!currentPlanId) {
+      toast({
+        title: 'Plan ID missing',
+        description: 'Unable to download PDF. Please regenerate the seating plan.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
-      // Dynamically import html2pdf
-      const html2pdf = (await import('html2pdf.js')).default;
+      console.log('Calling backend PDF endpoint:', `/api/plans/${currentPlanId}/pdf`);
       
-      // Create a printable container
-      const printContainer = document.createElement('div');
-      printContainer.style.padding = '0';
-      printContainer.style.backgroundColor = 'white';
-      printContainer.style.color = 'black';
-      printContainer.style.width = '210mm'; // A4 width
-      printContainer.style.minHeight = '297mm'; // A4 height
-
-      generatedPlans.forEach((plan, planIndex) => {
-        const room = rooms.find(r => r.id === plan.roomId);
-        
-        // Create a page wrapper for each room
-        const pageWrapper = document.createElement('div');
-        pageWrapper.style.width = '794px'; // A4 width in pixels (210mm at 96 DPI)
-        pageWrapper.style.minHeight = '1123px'; // A4 height - minimum one page
-        pageWrapper.style.padding = '40px';
-        pageWrapper.style.marginBottom = '0';
-        // Force page breaks
-        if (planIndex > 0) {
-          pageWrapper.style.pageBreakBefore = 'always';
-          pageWrapper.style.breakBefore = 'page';
-        }
-        if (planIndex < generatedPlans.length - 1) {
-          pageWrapper.style.pageBreakAfter = 'always';
-          pageWrapper.style.breakAfter = 'page';
-        }
-        pageWrapper.style.pageBreakInside = 'avoid';
-        pageWrapper.style.breakInside = 'avoid';
-        pageWrapper.style.display = 'block';
-        pageWrapper.style.boxSizing = 'border-box';
-        
-        const roomDiv = document.createElement('div');
-        roomDiv.style.width = '100%';
-        roomDiv.style.height = 'auto';
-        roomDiv.style.maxHeight = '100%';
-        roomDiv.style.overflow = 'auto';
-
-        // Room header
-        const header = document.createElement('div');
-        header.style.marginBottom = '20px';
-        header.style.borderBottom = '2px solid #000';
-        header.style.paddingBottom = '10px';
-        const roomName = document.createElement('h2');
-        roomName.textContent = `Room: ${room?.name || plan.roomId}`;
-        roomName.style.fontSize = '24px';
-        roomName.style.fontWeight = 'bold';
-        roomName.style.margin = '0 0 5px 0';
-        const roomInfo = document.createElement('p');
-        roomInfo.textContent = `${room?.rows || 0} × ${room?.columns || 0} = ${room?.capacity || 0} seats`;
-        roomInfo.style.margin = '0';
-        roomInfo.style.color = '#666';
-        header.appendChild(roomName);
-        header.appendChild(roomInfo);
-
-        // Board indicator
-        const boardDiv = document.createElement('div');
-        boardDiv.textContent = 'BOARD / FRONT';
-        boardDiv.style.textAlign = 'center';
-        boardDiv.style.padding = '10px';
-        boardDiv.style.backgroundColor = '#f0f0f0';
-        boardDiv.style.marginBottom = '20px';
-        boardDiv.style.fontWeight = 'bold';
-
-        // Create table for seats
-        const table = document.createElement('table');
-        table.style.width = '100%';
-        table.style.borderCollapse = 'collapse';
-        table.style.marginBottom = '0';
-        table.style.fontSize = '10px'; // Smaller font to fit more
-
-        // Column headers
-        const headerRow = document.createElement('tr');
-        const emptyHeader = document.createElement('th');
-        emptyHeader.style.border = '1px solid #ddd';
-        emptyHeader.style.padding = '8px';
-        emptyHeader.style.width = '40px';
-        headerRow.appendChild(emptyHeader);
-        for (let c = 0; c < (room?.columns || 0); c++) {
-          const th = document.createElement('th');
-          th.textContent = String(c + 1);
-          th.style.border = '1px solid #ddd';
-          th.style.padding = '8px';
-          th.style.textAlign = 'center';
-          th.style.backgroundColor = '#f5f5f5';
-          headerRow.appendChild(th);
-        }
-        table.appendChild(headerRow);
-
-        // Seat rows
-        plan.seats.forEach((row, rowIndex) => {
-          const tr = document.createElement('tr');
-          const rowLabel = document.createElement('td');
-          rowLabel.textContent = String(rowIndex + 1);
-          rowLabel.style.border = '1px solid #ddd';
-          rowLabel.style.padding = '8px';
-          rowLabel.style.textAlign = 'center';
-          rowLabel.style.fontWeight = 'bold';
-          rowLabel.style.backgroundColor = '#f5f5f5';
-          tr.appendChild(rowLabel);
-
-          row.forEach((seat) => {
-            const td = document.createElement('td');
-            td.textContent = seat.studentId || '';
-            td.style.border = '1px solid #ddd';
-            td.style.padding = '8px';
-            td.style.textAlign = 'center';
-            td.style.minWidth = '60px';
-            td.style.height = '40px';
-            if (seat.sessionId) {
-              const session = sessions.find(s => ((s as any)._id || s.id) === seat.sessionId);
-              const colorIndex = (session as any)?.colorIndex || 1;
-              // Light background color for session
-              const colors: { [key: number]: string } = {
-                1: '#e3f2fd',
-                2: '#e8f5e9',
-                3: '#f3e5f5',
-                4: '#fff3e0',
-                5: '#fce4ec',
-                6: '#e0f2f1',
-                7: '#fff9c4',
-                8: '#ffebee',
-              };
-              td.style.backgroundColor = colors[colorIndex] || '#fff';
-            }
-            tr.appendChild(td);
-          });
-          table.appendChild(tr);
-        });
-
-        roomDiv.appendChild(header);
-        roomDiv.appendChild(boardDiv);
-        roomDiv.appendChild(table);
-        
-        pageWrapper.appendChild(roomDiv);
-        printContainer.appendChild(pageWrapper);
-        
-        // Add explicit page break element after each room (except last)
-        if (planIndex < generatedPlans.length - 1) {
-          const pageBreak = document.createElement('div');
-          pageBreak.style.pageBreakAfter = 'always';
-          pageBreak.style.breakAfter = 'page';
-          pageBreak.style.height = '0';
-          pageBreak.style.width = '100%';
-          pageBreak.style.clear = 'both';
-          printContainer.appendChild(pageBreak);
-        }
+      // Call backend PDF endpoint
+      const response = await api.get(`/plans/${currentPlanId}/pdf`, {
+        responseType: 'blob', // Important: tell axios to expect binary data
       });
 
-      // Generate PDF with proper page break handling
-      // Append to body temporarily for proper rendering
-      printContainer.style.position = 'absolute';
-      printContainer.style.left = '-9999px';
-      printContainer.style.top = '0';
-      document.body.appendChild(printContainer);
-      
-      const opt = {
-        margin: 0,
-        filename: `seating-plan-${new Date().toISOString().split('T')[0]}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 1,
-          useCORS: true,
-          logging: false,
-          windowWidth: 794, // A4 width in pixels at 96 DPI
-        },
-        jsPDF: { 
-          unit: 'mm', 
-          format: 'a4', 
-          orientation: 'portrait',
-        },
-      };
-      
-      await html2pdf().set(opt).from(printContainer).save();
+      console.log('✓ PDF received from backend');
+      console.log('PDF blob size:', response.data.size);
+      console.log('PDF content type:', response.data.type);
+
+      // Create a blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `seating-plan-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
       
       // Clean up
-      document.body.removeChild(printContainer);
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
       toast({
         title: 'PDF Downloaded',
         description: 'Seating plan PDF has been downloaded successfully.',
       });
-    } catch (error) {
-      console.error('PDF generation error:', error);
+    } catch (error: any) {
+      console.error('✗ PDF download failed!');
+      console.error('Error object:', error);
+      console.error('Error response:', error?.response);
+      console.error('Error status:', error?.response?.status);
+      console.error('Error data:', error?.response?.data);
+      
+      const message = error?.response?.data?.msg || error?.message || 'Failed to download PDF';
+      
       toast({
         title: 'Error',
-        description: 'Failed to generate PDF. Please try printing instead.',
+        description: message,
         variant: 'destructive',
       });
     }

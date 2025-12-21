@@ -191,11 +191,22 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
     throw new Error('Some sessions do not belong to the user');
   }
 
-  // Extract session info for registration number format
-  // Use first session's name to determine year and department
-  // All sessions in a timeslot should use the same format
-  const sessionInfo = parseSessionInfo(userSessions[0]?.name || '');
-  const { year, dept } = sessionInfo;
+  // Create a map of sessionId -> { name, year } for registration number generation
+  // This allows us to use actual session names and years (e.g., "FALL" with year 2024, "SPRING" with year 2025)
+  const sessionMap = new Map();
+  userSessions.forEach(session => {
+    // Extract year from session name or use session.year if it exists, otherwise fallback to current year
+    const sessionInfo = parseSessionInfo(session.name || '');
+    // Use session.year if available (as number or string), otherwise parse from name
+    // Convert to string for consistent formatting
+    const year = session.year ? String(session.year) : sessionInfo.year;
+    sessionMap.set(String(session._id), {
+      name: session.name,
+      year: year
+    });
+  });
+  
+  console.log('Session map created:', Array.from(sessionMap.entries()).map(([id, data]) => ({ id, name: data.name, year: data.year }))); // Use year from session name or current year
 
   // Global roll number counter - starts at 1, increments for each student seated
   // This ensures continuous numbering across all sections
@@ -252,10 +263,21 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
       seat.sectionId = token.sectionId;
       seat.studentId = token.rollNo;
       
-      // Generate registration number: SESSION-DEPT-ROLLNO
-      // Format roll number with zero-padding (e.g., 01, 02, ..., 10, 11)
-      const rollNoStr = globalRollNumber.toString().padStart(2, '0');
-      seat.registrationNumber = `${year}-${dept}-${rollNoStr}`;
+      // Generate registration number: SESSION_NAME-ROLLNO (no year prefix)
+      // Format: FALL-001, SPRING-001, etc.
+      const sessionData = sessionMap.get(token.sessionId) || { name: 'GEN', year: new Date().getFullYear() };
+      const sessionName = sessionData.name;
+      
+      // Normalize session name: uppercase, remove spaces, limit length
+      // Note: Keep the name as-is even if it contains year (e.g., "SPRING2024")
+      const sessionNameNormalized = sessionName.toUpperCase().replace(/\s+/g, '').substring(0, 15);
+      const rollNoStr = globalRollNumber.toString().padStart(3, '0'); // Use 3 digits for better readability (001, 002, etc.)
+      seat.registrationNumber = `${sessionNameNormalized}-${rollNoStr}`;
+      
+      // Log first few registration numbers for debugging
+      if (globalRollNumber <= 3) {
+        console.log(`Registration number generated: ${seat.registrationNumber} (Session: ${sessionName}, Roll: ${rollNoStr})`);
+      }
       
       // Increment global counter for next student
       // This ensures continuous numbering across sections

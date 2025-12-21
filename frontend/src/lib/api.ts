@@ -19,6 +19,17 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Enhanced logging for /plans/generate requests
+    if (config.url?.includes('/plans/generate')) {
+      console.log('=== Frontend API Interceptor: /plans/generate ===');
+      console.log('Request URL:', config.url);
+      console.log('Request method:', config.method);
+      console.log('Request data:', config.data);
+      console.log('Request headers:', config.headers);
+      console.log('Content-Type:', config.headers['Content-Type']);
+    }
+    
     return config;
   },
   (error) => {
