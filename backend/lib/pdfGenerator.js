@@ -5,13 +5,6 @@ const TimeSlot = require('../models/TimeSlot');
 
 /**
  * Extract session year and department from session name
- * Expected formats:
- *   - "FALL" → year: current year (or session.year if provided)
- *   - "SPRING2024" → year: 2024 (or session.year if provided, which might be 2025)
- *   - "2024 CS" → year: 2024
- * Falls back to current year and "GEN" if not parseable
- * 
- * Note: If session.year is provided, it takes precedence over parsed year
  */
 function parseSessionInfo(sessionName) {
   if (!sessionName) {
@@ -21,12 +14,9 @@ function parseSessionInfo(sessionName) {
     };
   }
   
-  // Try to extract year (4 digits) - looks for years like 2024, 2025, etc.
-  // This handles formats like "SPRING2024", "2024 FALL", "FALL 2024", etc.
   const yearMatch = sessionName.match(/\b(20\d{2})\b/);
   const deptMatch = sessionName.match(/\b([A-Z]{2,3})\b/i);
   
-  // Extract year from name, or use current year as fallback
   const year = yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
   const dept = deptMatch ? deptMatch[1].toUpperCase() : 'GEN';
   
@@ -35,9 +25,6 @@ function parseSessionInfo(sessionName) {
 
 /**
  * Generate PDF for seating plan with registration numbers
- * @param {Object} plan - Plan document with arrangement data
- * @param {string} userId - User ID for authorization
- * @returns {Promise<Buffer>} PDF buffer
  */
 async function generateSeatingPlanPDF(plan, userId) {
   return new Promise(async (resolve, reject) => {
@@ -55,14 +42,10 @@ async function generateSeatingPlanPDF(plan, userId) {
       
       console.log('PDF Generator - Sessions found:', sessions.map(s => ({ id: s._id, name: s.name })));
 
-      // Create session map for reference (sessionId -> { name, year })
-      // Each session can have its own year extracted from name or from session.year property
+      // Create session map
       const sessionMap = new Map();
       sessions.forEach(session => {
-        // Extract year from session name or use session.year if it exists, otherwise fallback to current year
         const sessionInfo = parseSessionInfo(session.name || '');
-        // Use session.year if available (as number or string), otherwise parse from name
-        // Convert to string for consistent formatting
         const year = session.year ? String(session.year) : sessionInfo.year;
         sessionMap.set(String(session._id), {
           name: session.name,
@@ -72,11 +55,11 @@ async function generateSeatingPlanPDF(plan, userId) {
       
       console.log('PDF Generator - Session map:', Array.from(sessionMap.entries()).map(([id, data]) => ({ id, name: data.name, year: data.year })));
 
-      // Create PDF document in landscape orientation for better layout
+      // Create PDF document
       const doc = new PDFDocument({ 
         margin: 30, 
         size: 'A4',
-        layout: 'landscape' // Landscape orientation: 297×210mm (width × height)
+        layout: 'landscape'
       });
       const buffers = [];
       
@@ -87,14 +70,9 @@ async function generateSeatingPlanPDF(plan, userId) {
       });
       doc.on('error', reject);
 
-      // Extract seating plans from arrangement
+      // Extract seating plans
       const seatingPlans = plan.arrangement?.rooms || [];
       console.log('PDF Generator - Seating plans count:', seatingPlans.length);
-      console.log('PDF Generator - First plan sample:', seatingPlans[0] ? {
-        roomId: seatingPlans[0].roomId,
-        seatsCount: seatingPlans[0].seats?.length || 0,
-        firstSeatSample: seatingPlans[0].seats?.[0]?.[0] || null
-      } : null);
       
       if (seatingPlans.length === 0) {
         throw new Error('No seating plans found in arrangement');
@@ -107,63 +85,109 @@ async function generateSeatingPlanPDF(plan, userId) {
       
       console.log('PDF Generator - Rooms found:', rooms.length);
 
-      // Constants for pagination
-      const ROWS_PER_PAGE = 5; // Maximum rows per page for readability
+      // Constants
+      const ROWS_PER_PAGE = 5;
+      const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
       
-      // Helper function to draw full header (only on first page of each room)
+      // ═══════════════════════════════════════════
+      // HEADER DRAWING FUNCTION - PROPER SPACING & CENTERING
+      // ═══════════════════════════════════════════
       const drawFullHeader = () => {
-        // Reset to top of page
-        doc.y = 30;
+        const startY = 30;
+        let currentY = startY;
         
-        // Title - centered
-        doc.fontSize(22).font('Helvetica-Bold').fillColor('black')
-          .text('EXAM SEATING PLAN', { align: 'center' });
-        doc.moveDown(0.5);
+        // 1. Title - EXAM SEATING PLAN (CENTERED)
+        doc.fontSize(22).font('Helvetica-Bold').fillColor('black');
+        doc.text('EXAM SEATING PLAN', 0, currentY, { 
+          align: 'center',
+          width: pageWidth
+        });
+        currentY += 35; // Increased spacing
         
-        // Time slot information - centered
-        doc.fontSize(14).font('Helvetica')
-          .text(`Time Slot: ${timeSlot.time}`, { align: 'center' });
-        doc.moveDown(0.4);
+        // 2. Time slot (CENTERED)
+        doc.fontSize(12).font('Helvetica');
+        doc.text(`Time Slot: ${timeSlot.time}`, 0, currentY, {
+          align: 'center',
+          width: pageWidth
+        });
+        currentY += 20; // Increased spacing
         
-        // Session information - centered
-        doc.fontSize(12)
-          .text(`Sessions: ${sessions.map(s => s.name).join(', ')}`, { align: 'center' });
-        doc.moveDown(0.4);
+        // 3. Sessions (CENTERED)
+        doc.fontSize(12);
+        doc.text(`Sessions: ${sessions.map(s => s.name).join(', ')}`, 0, currentY, {
+          align: 'center',
+          width: pageWidth
+        });
+        currentY += 20; // Increased spacing
         
-        // Registration number format info - centered
+        // 4. Registration format (CENTERED)
         const firstSessionName = sessions[0]?.name.toUpperCase().replace(/\s+/g, '') || 'SESSION';
         const exampleFormat = `${firstSessionName}-001`;
-        doc.fontSize(10).fillColor('gray')
-          .text(`Registration Format: [SESSION]-[ROLLNO] (e.g., ${exampleFormat})`, { align: 'center' });
+        doc.fontSize(10).fillColor('gray');
+        doc.text(`Registration Format: [SESSION]-[ROLLNO] (e.g., ${exampleFormat})`, 0, currentY, {
+          align: 'center',
+          width: pageWidth
+        });
         doc.fillColor('black');
-        doc.moveDown(0.6);
+        currentY += 30; // Extra spacing before separator
+         const drawRoomName = (roomName, isContinuation = false) => {
+        const startY = 30;
         
-        // Separator line
-        const pageWidth = doc.page.width;
-        doc.strokeColor('#c8c8c8');
-        doc.lineWidth(0.5);
-        doc.moveTo(40, doc.y)
-          .lineTo(pageWidth - 40, doc.y)
-          .stroke();
+        if (isContinuation) {
+          doc.fontSize(14).fillColor('blue').font('Helvetica-Bold');
+          doc.text(`Room: ${roomName} (continued)`, 0, startY, {
+            align: 'center',
+            width: pageWidth
+          });
+          doc.fillColor('black');
+          return startY + 40; // Return Y position after room name
+        } else {
+          doc.fontSize(18).fillColor('blue').font('Helvetica-Bold');
+          doc.text(`Room: ${roomName}`, 0, startY, {
+            align: 'center',
+            width: pageWidth
+          });
+          doc.fillColor('black');
+          return startY + 35; // Return Y position after room name
+        }
+      };
+        // 5. Separator line (CENTERED)
+        doc.strokeColor('#c8c8c8').lineWidth(0.5);
+        doc.moveTo(40, currentY).lineTo(pageWidth - 40, currentY).stroke();
         doc.strokeColor('black');
-        doc.moveDown(0.5);
+        currentY += 25; // Spacing after separator
+        
+        // Return the Y position after header (where grid should start)
+        return currentY;
       };
       
-      // Helper function to draw room name (for continuation pages)
+      // ═══════════════════════════════════════════
+      // ROOM NAME FUNCTION (CENTERED)
+      // ═══════════════════════════════════════════
       const drawRoomName = (roomName, isContinuation = false) => {
-        doc.y = 30;
+        const startY = 30;
+        
         if (isContinuation) {
-          doc.fontSize(14).fillColor('blue').font('Helvetica-Bold')
-            .text(`Room: ${roomName} (continued)`, { align: 'center' });
+          doc.fontSize(14).fillColor('blue').font('Helvetica-Bold');
+          doc.text(`Room: ${roomName} (continued)`, 0, startY, {
+            align: 'center',
+            width: pageWidth
+          });
+          doc.fillColor('black');
+          return startY + 40; // Return Y position after room name
         } else {
-          doc.fontSize(18).fillColor('blue').font('Helvetica-Bold')
-            .text(`Room: ${roomName}`, { align: 'center' });
+          doc.fontSize(18).fillColor('blue').font('Helvetica-Bold');
+          doc.text(`Room: ${roomName}`, 0, startY, {
+            align: 'center',
+            width: pageWidth
+          });
+          doc.fillColor('black');
+          return startY + 35; // Return Y position after room name
         }
-        doc.fillColor('black');
-        doc.moveDown(0.8);
       };
 
-      // Process each room with pagination
+      // Process each room
       let isFirstPageOfPDF = true;
       
       for (let roomIdx = 0; roomIdx < seatingPlans.length; roomIdx++) {
@@ -175,37 +199,39 @@ async function generateSeatingPlanPDF(plan, userId) {
           continue;
         }
 
-        // Calculate how many pages needed for this room
         const totalPagesForRoom = Math.ceil(room.rows / ROWS_PER_PAGE);
         
-        // Process each page of this room
         for (let pageNum = 0; pageNum < totalPagesForRoom; pageNum++) {
-          // Add new page (except very first page of PDF)
           if (!isFirstPageOfPDF) {
             doc.addPage();
           }
           isFirstPageOfPDF = false;
           
-          // Draw header based on page number
+          // ═══════════════════════════════════════════
+          // DRAW HEADER AND GET START POSITION
+          // ═══════════════════════════════════════════
+          let gridStartY;
+          
           if (pageNum === 0) {
-            // First page of room - show full header
-            drawFullHeader();
-            drawRoomName(room.name, false);
+            // First page of room - full header + room name
+            const headerEndY = drawFullHeader();
+            const roomNameEndY = drawRoomName(room.name, false);
+            gridStartY = Math.max(headerEndY, roomNameEndY) + 20; // 20pt buffer
           } else {
-            // Continuation page - show only room name
-            drawRoomName(room.name, true);
+            // Continuation page - only room name
+            gridStartY = drawRoomName(room.name, true) + 15; // 15pt buffer
           }
 
           // Get seating data
           const seats = seatingPlan.seats || [];
           if (seats.length === 0) {
             if (pageNum === 0) {
-              doc.text('No seats assigned', { align: 'center' });
+              doc.text('No seats assigned', pageWidth / 2, gridStartY, { align: 'center' });
             }
-            break; // Skip remaining pages for this room, move to next room
+            break;
           }
 
-          // Create a 2D map of seats for easy lookup: [row][col] -> seat
+          // Create seat map
           const seatMap = new Map();
           for (let rowIdx = 0; rowIdx < seats.length; rowIdx++) {
             const row = seats[rowIdx];
@@ -216,158 +242,136 @@ async function generateSeatingPlanPDF(plan, userId) {
             }
           }
           
-          // Calculate which rows to show on this page
+          // Calculate rows for this page
           const rowStart = pageNum * ROWS_PER_PAGE;
           const rowEnd = Math.min((pageNum + 1) * ROWS_PER_PAGE - 1, room.rows - 1);
           const rowsOnThisPage = rowEnd - rowStart + 1;
 
-          // Grid layout settings - use full page width with landscape orientation
-          const pageWidth = doc.page.width; // Landscape: ~756 points (297mm)
-          const pageHeight = doc.page.height; // Landscape: ~540 points (210mm)
+          // ═══════════════════════════════════════════
+          // GRID LAYOUT - USING AVAILABLE SPACE
+          // ═══════════════════════════════════════════
           const margin = 30;
           const availableWidth = pageWidth - (margin * 2);
-          const availableHeight = pageHeight - doc.y - 50; // Leave space for footer
+          const availableHeight = pageHeight - gridStartY - 60; // Space from gridStartY to bottom
           
-          // Row and column label space
           const rowLabelWidth = 35;
           const colLabelHeight = 25;
           
-          // Calculate optimal cell size - larger boxes for readability
-          const targetCellWidthMM = 50;
-          const targetCellHeightMM = 50; // Increased to 50mm for better readability
-          const gapSizeMM = 8;
-          
-          // Convert mm to points (1mm = 2.83465 points)
+          // Cell sizing
           const mmToPoints = 2.83465;
-          const targetCellWidth = targetCellWidthMM * mmToPoints; // ~142 points
-          const targetCellHeight = targetCellHeightMM * mmToPoints; // ~142 points
-          const gapSize = gapSizeMM * mmToPoints; // ~23 points
+          const targetCellWidth = 50 * mmToPoints;
+          const targetCellHeight = 50 * mmToPoints;
+          const gapSize = 8 * mmToPoints;
           
-          // Calculate maximum cell size that fits (based on rows on THIS page)
           const maxCellWidth = Math.floor((availableWidth - rowLabelWidth) / room.columns);
           const maxCellHeight = Math.floor((availableHeight - colLabelHeight - 20) / rowsOnThisPage);
           
-          // Use target size or maximum that fits, whichever is smaller
           const cellWidth = Math.min(targetCellWidth, maxCellWidth - gapSize);
           const cellHeight = Math.min(targetCellHeight, maxCellHeight - gapSize);
           
-          // Calculate grid dimensions (only for rows on this page)
           const gridWidth = room.columns * (cellWidth + gapSize) - gapSize;
-          const gridHeight = rowsOnThisPage * (cellHeight + gapSize) - gapSize;
           
-          // Center the grid horizontally
+          // Center grid horizontally
           const startX = (pageWidth - gridWidth - rowLabelWidth) / 2 + rowLabelWidth;
-          const startY = doc.y + 10; // Space after header/room name
+          const startY = gridStartY; // Start at calculated position
 
-          // Draw seating grid - only show rows for this page
+          // ═══════════════════════════════════════════
+          // DRAW SEATING GRID
+          // ═══════════════════════════════════════════
           for (let rowIdx = rowStart; rowIdx <= rowEnd; rowIdx++) {
-            const rowIndexOnPage = rowIdx - rowStart; // Index within this page (0-4)
+            const rowIndexOnPage = rowIdx - rowStart;
             
             for (let colIdx = 0; colIdx < room.columns; colIdx++) {
               const key = `${rowIdx}-${colIdx}`;
               const seat = seatMap.get(key);
             
-              // Calculate position (using rowIndexOnPage for vertical positioning)
               const x = startX + colIdx * (cellWidth + gapSize);
               const y = startY + rowIndexOnPage * (cellHeight + gapSize);
             
-            // Get registration number
-            const registrationNumber = seat && !seat.isEmpty 
-              ? (seat.registrationNumber || seat.studentId || '') 
-              : '';
+              const registrationNumber = seat && !seat.isEmpty 
+                ? (seat.registrationNumber || seat.studentId || '') 
+                : '';
             
-            // Draw blue box (or gray if empty)
-            if (registrationNumber) {
-              // Blue fill for assigned seats (RGB: 66, 139, 202)
-              doc.fillColor('#428bca');
-              doc.rect(x, y, cellWidth, cellHeight).fill();
-              
-              // White text for registration number - clean two-line format with larger fonts
-              doc.fillColor('white');
-              
-              // Split registration numbers into 2 lines with proper formatting
-              // Format: "FALL2024" (bold, font 10) on first line, "063" (normal, font 13) on second line
-              const textY = y + cellHeight / 2; // Vertical center of cell
-              
-              // Always split at hyphen for consistent 2-line display
-              const parts = registrationNumber.split('-');
-              if (parts.length >= 2) {
-                // Split into prefix (session name) and number
-                const prefix = parts.slice(0, -1).join('-');
-                const number = parts[parts.length - 1];
+              if (registrationNumber) {
+                // Blue box
+                doc.fillColor('#428bca');
+                doc.rect(x, y, cellWidth, cellHeight).fill();
                 
-                // First line: session name (e.g., "FALL2024") - bold, font 10
-                doc.fontSize(10).font('Helvetica-Bold');
-                doc.text(prefix, x, textY - 6, {
-                  align: 'center',
-                  width: cellWidth
-                });
+                // White text - 2 lines
+                doc.fillColor('white');
+                const textY = y + cellHeight / 2;
                 
-                // Second line: number only (e.g., "063") - normal, font 13 (LARGER for readability)
-                doc.fontSize(13).font('Helvetica');
-                doc.text(number, x, textY + 6, {
-                  align: 'center',
-                  width: cellWidth
-                });
+                const parts = registrationNumber.split('-');
+                if (parts.length >= 2) {
+                  const prefix = parts.slice(0, -1).join('-');
+                  const number = parts[parts.length - 1];
+                  
+                  // Line 1: Session name (bold, 10pt)
+                  doc.fontSize(10).font('Helvetica-Bold');
+                  doc.text(prefix, x, textY - 6, {
+                    align: 'center',
+                    width: cellWidth
+                  });
+                  
+                  // Line 2: Number (normal, 13pt)
+                  doc.fontSize(13).font('Helvetica');
+                  doc.text(number, x, textY + 6, {
+                    align: 'center',
+                    width: cellWidth
+                  });
+                } else {
+                  doc.fontSize(11).font('Helvetica');
+                  doc.text(registrationNumber, x, textY, {
+                    align: 'center',
+                    width: cellWidth
+                  });
+                }
+                
+                doc.fillColor('black');
               } else {
-                // Fallback: single line if no hyphen found
-                doc.fontSize(11).font('Helvetica');
-                doc.text(registrationNumber, x, textY, {
-                  align: 'center',
-                  width: cellWidth
-                });
+                // Empty seat (gray)
+                doc.fillColor('#f5f5f5');
+                doc.rect(x, y, cellWidth, cellHeight).fill();
+                doc.strokeColor('#cccccc');
+                doc.rect(x, y, cellWidth, cellHeight).stroke();
+                doc.strokeColor('black');
+                doc.fillColor('black');
               }
-              
-              doc.fillColor('black');
-            } else {
-              // Gray fill and outline for empty seats
-              doc.fillColor('#f5f5f5');
-              doc.rect(x, y, cellWidth, cellHeight).fill();
-              doc.strokeColor('#cccccc');
-              doc.rect(x, y, cellWidth, cellHeight).stroke();
-              doc.strokeColor('black');
-              doc.fillColor('black');
             }
           }
-        }
 
-          // Draw row labels (1, 2, 3...) on left side - show actual row numbers for this page
+          // Row labels (left)
           doc.fontSize(11).fillColor('black').font('Helvetica-Bold');
           for (let rowIdx = rowStart; rowIdx <= rowEnd; rowIdx++) {
             const rowIndexOnPage = rowIdx - rowStart;
             const y = startY + rowIndexOnPage * (cellHeight + gapSize) + cellHeight / 2;
-            doc.text(String(rowIdx + 1), startX - rowLabelWidth + 5, y - 4, {
+            doc.text(String(rowIdx + 1), startX - rowLabelWidth + 5, y - 5, {
               align: 'right',
               width: rowLabelWidth - 10
             });
           }
-          doc.font('Helvetica'); // Reset to regular font
+          doc.font('Helvetica');
 
-          // Draw column labels (1, 2, 3...) at bottom
+          // Column labels (bottom)
           doc.fontSize(11).font('Helvetica-Bold');
           for (let colIdx = 0; colIdx < room.columns; colIdx++) {
             const x = startX + colIdx * (cellWidth + gapSize) + cellWidth / 2;
             const y = startY + rowsOnThisPage * (cellHeight + gapSize) + 8;
-            doc.text(String(colIdx + 1), x, y, {
+            doc.text(String(colIdx + 1), x - cellWidth / 2, y, {
               align: 'center',
               width: cellWidth
             });
           }
-          doc.font('Helvetica'); // Reset to regular font
+          doc.font('Helvetica');
 
-          // Move down after grid
-          doc.y = startY + rowsOnThisPage * (cellHeight + gapSize) + colLabelHeight + 10;
+          // ═══════════════════════════════════════════
+          // NO TIMESTAMP FOOTER - REMOVED COMPLETELY
+          // ═══════════════════════════════════════════
+          // The "Generated on: ..." line has been removed
+          // to prevent extra blank pages
           
-          // Add footer for this page - centered
-          const footerY = doc.page.height - 30;
-          doc.fontSize(8).fillColor('gray');
-          doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.page.width / 2, footerY, { align: 'center' });
-          doc.fillColor('black');
-        } // End of page loop for this room
-      } // End of room loop
-
-      // No need to add extra pages - PDFKit handles page creation automatically
-      // The last room's page is already created in the loop above
+        } // End page loop
+      } // End room loop
       
       doc.end();
     } catch (error) {
@@ -380,4 +384,3 @@ module.exports = {
   generateSeatingPlanPDF,
   parseSessionInfo,
 };
-
