@@ -11,7 +11,15 @@ router.use(authMiddleware);
 router.get('/', async (req, res) => {
   try {
     const sessions = await Session.find({ user: req.user.id });
-    res.json(sessions);
+    // Add totalStudents field to each session
+    const sessionsWithCounts = sessions.map(session => {
+      const totalStudents = (session.sections || []).reduce((sum, sec) => sum + (sec.studentCount || (sec.rollNumbers ? sec.rollNumbers.length : 0)), 0);
+      return {
+        ...session.toObject(),
+        totalStudents
+      };
+    });
+    res.json(sessionsWithCounts);
   } catch (err) {
     res.status(500).send('Server error');
   }

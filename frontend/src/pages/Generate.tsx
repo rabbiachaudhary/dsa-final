@@ -245,15 +245,30 @@ const Generate = () => {
 
     try {
       console.log('Calling backend PDF endpoint:', `/api/plans/${currentPlanId}/pdf`);
-      
       // Call backend PDF endpoint
       const response = await api.get(`/plans/${currentPlanId}/pdf`, {
-        responseType: 'blob', // Important: tell axios to expect binary data
+        responseType: 'blob',
       });
 
-      console.log('✓ PDF received from backend');
-      console.log('PDF blob size:', response.data.size);
-      console.log('PDF content type:', response.data.type);
+      // Check for empty or invalid PDF
+      if (!response.data || response.data.size === 0) {
+        toast({
+          title: 'No PDF generated',
+          description: 'No data was returned from the server. Please check your plan and try again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Check if the blob is actually a PDF
+      if (response.data.type !== 'application/pdf') {
+        toast({
+          title: 'Invalid PDF',
+          description: 'The file returned is not a valid PDF. Please try regenerating the plan.',
+          variant: 'destructive',
+        });
+        return;
+      }
 
       // Create a blob URL and trigger download
       const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -263,8 +278,6 @@ const Generate = () => {
       link.download = `seating-plan-${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(link);
       link.click();
-      
-      // Clean up
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
@@ -274,13 +287,7 @@ const Generate = () => {
       });
     } catch (error: any) {
       console.error('✗ PDF download failed!');
-      console.error('Error object:', error);
-      console.error('Error response:', error?.response);
-      console.error('Error status:', error?.response?.status);
-      console.error('Error data:', error?.response?.data);
-      
       const message = error?.response?.data?.msg || error?.message || 'Failed to download PDF';
-      
       toast({
         title: 'Error',
         description: message,
@@ -476,7 +483,6 @@ const Generate = () => {
                             </div>
                           ))}
                         </div>
-                        
                         {/* Column numbers */}
                         <div className="flex gap-1.5 mt-2">
                           <div className="w-6" />

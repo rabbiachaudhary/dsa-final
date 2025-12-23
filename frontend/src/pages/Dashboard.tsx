@@ -46,8 +46,27 @@ const Dashboard = () => {
     });
   }, []);
 
-  const totalStudents = sessions.reduce((sum, s) => sum + (s.totalStudents || 0), 0);
-  const upcomingSlots = timeSlots.filter((slot: any) => new Date(slot.date) >= new Date());
+  // Fallback: if totalStudents missing, sum all students in sections
+  const getSessionStudentCount = (session: any) => {
+    if (session.totalStudents && session.totalStudents > 0) return session.totalStudents;
+    if (session.sections && Array.isArray(session.sections)) {
+      return session.sections.reduce((acc: number, sec: any) => acc + (sec.students?.length || 0), 0);
+    }
+    return 0;
+  };
+  const totalStudents = sessions.reduce((sum, s) => sum + getSessionStudentCount(s), 0);
+  // Only count slots that are in the future and have at least one session assigned (works with populated or ID array)
+  const upcomingSlots = timeSlots.filter((slot: any) => {
+    // Try to get date from slot.date or slot.time
+    let slotDate: Date | null = null;
+    if (slot.date) slotDate = new Date(slot.date);
+    else if (typeof slot.time === 'string') slotDate = new Date(slot.time.split(' ')[0]);
+    if (!slotDate || isNaN(slotDate.getTime())) return false;
+    // Check for sessions (populated or IDs)
+    const sessionsArr = slot.sessions || slot.sessionIds;
+    const hasSessions = Array.isArray(sessionsArr) && sessionsArr.length > 0;
+    return slotDate >= new Date() && hasSessions;
+  });
 
   return (
     <div className="p-6 lg:p-8 space-y-8 animate-fade-in">
@@ -178,7 +197,7 @@ const Dashboard = () => {
                     <div>
                       <p className="font-medium text-foreground">{session.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {session.sections ? session.sections.length : 0} sections • {session.totalStudents || 0} students
+                        {session.sections ? session.sections.length : 0} sections • {getSessionStudentCount(session)} students
                       </p>
                     </div>
                   </div>

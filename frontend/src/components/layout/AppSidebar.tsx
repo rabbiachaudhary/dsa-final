@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/sessions', icon: Users, label: 'Sessions' },
   { to: '/time-slots', icon: Clock, label: 'Time Slots' },
   { to: '/rooms', icon: DoorOpen, label: 'Rooms' },
