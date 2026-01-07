@@ -18,22 +18,20 @@ export default function SignUp() {
   const navigate = useNavigate();
 
   const getErrorMessage = (err: unknown): string => {
+    const response = (err as { response?: unknown })?.response as
+      | { status?: number; data?: unknown }
+      | undefined;
+    const status = response?.status;
+    const msg = (response?.data as { msg?: string } | undefined)?.msg?.trim();
+
+    if (status === 400 && msg === "User already exists") {
+      return "An account with this email already exists. Please sign in or use a different email.";
+    }
+
+    if (msg) return msg;
     if (typeof err === "string") return err;
     if (err instanceof Error) return err.message;
-    if (typeof err === "object" && err !== null) {
-      const obj = err as Record<string, unknown>;
-      const response = obj.response;
-      if (typeof response === "object" && response !== null) {
-        const resObj = response as Record<string, unknown>;
-        const data = resObj.data;
-        if (typeof data === "object" && data !== null) {
-          const dataObj = data as Record<string, unknown>;
-          const msg = dataObj.msg;
-          if (typeof msg === "string" && msg.trim().length > 0) return msg;
-        }
-      }
-    }
-    return "Signup failed";
+    return "We couldn’t create your account. Please try again.";
   };
 
   useEffect(() => {
