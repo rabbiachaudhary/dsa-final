@@ -3,22 +3,19 @@
 .env.local
 .env.production
 .env.development
-.env.*.local
 
 # Dependencies
 node_modules/
 
-# Build outputs
-dist/
-build/
-
 # Logs
 *.log
+npm-debug.log*
+
+# Test files
+test-connection.js
+test-native-connection.js
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# IDE files
-.vscode/
-.idea/

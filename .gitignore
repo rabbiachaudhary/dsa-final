@@ -7,12 +7,11 @@
 
 # Dependencies
 node_modules/
+*/node_modules/
 
 # Build outputs
 dist/
 build/
-
-# Logs
 *.log
 
 # OS files
@@ -22,3 +21,13 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# Test files
+test-connection.js
+test-native-connection.js
+
+# MongoDB Atlas connection test files
+*.test.js
+
