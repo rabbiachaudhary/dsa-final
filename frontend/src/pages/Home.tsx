@@ -22,9 +22,9 @@ const HomePage: React.FC = () => {
           <div className="flex h-16 items-center justify-between">
             <Link to="/" className="flex items-center gap-2 group">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-sm shadow-lg shadow-blue-500/30 transition-all group-hover:scale-105 group-hover:shadow-blue-500/50">
-                D
+                S
               </div>
-              <span className="text-xl font-bold text-gray-900">DeskMate</span>
+              <span className="text-xl font-bold text-gray-900">SeatSync</span>
             </Link>
 
             <div className="hidden md:flex items-center gap-8">
@@ -219,7 +219,7 @@ const HomePage: React.FC = () => {
               Ready to transform your exam planning?
             </h2>
             <p className="cta-subtitle">
-              Join thousands of institutions using DeskMate to streamline their exam seating process.
+              Join thousands of institutions using SeatSync to streamline their exam seating process.
             </p>
             
             <div className="cta-buttons">
@@ -255,8 +255,8 @@ const HomePage: React.FC = () => {
         <div className="footer-content">
           <div className="footer-brand">
             <div className="footer-logo">
-              <div className="footer-logo-icon">D</div>
-              <span>DeskMate</span>
+              <div className="footer-logo-icon">S</div>
+              <span>SeatSync</span>
             </div>
             <p className="footer-tagline">
               Intelligent exam seating platform to streamline your planning process.
@@ -292,7 +292,7 @@ const HomePage: React.FC = () => {
         </div>
 
         <div className="footer-bottom">
-          © 2025 DeskMate. All rights reserved.
+          © 2025 SeatSync. All rights reserved.
         </div>
       </footer>
     </div>

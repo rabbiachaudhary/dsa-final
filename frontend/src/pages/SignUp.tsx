@@ -73,8 +73,8 @@ export default function SignUp() {
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-10">
         <Link to="/" className="group mb-8 inline-flex items-center justify-center gap-2 text-sm font-semibold text-gray-700 transition-all hover:text-gray-900">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/40 transition-all group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-blue-500/50">D</span>
-          <span className="text-xl">DeskMate</span>
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/40 transition-all group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-blue-500/50">S</span>
+          <span className="text-xl">SeatSync</span>
         </Link>
 
         <Card className="border-white/20 bg-white/70 shadow-2xl backdrop-blur-xl">
