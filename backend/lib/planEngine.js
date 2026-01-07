@@ -137,6 +137,7 @@ async function getConstraints(userId) {
       rollNoOrder: 'sequential',
       alternateSessionsEnabled: false,
       randomShuffle: false,
+      maxSessionsPerRoom: 1,
     };
   }
   // Derive normalized constraint object
@@ -151,6 +152,7 @@ async function getConstraints(userId) {
     rollNoOrder: last.rollNoOrder || 'sequential',
     alternateSessionsEnabled: !!last.alternateSessionsEnabled,
     randomShuffle: !!last.randomShuffle,
+    maxSessionsPerRoom: typeof last.maxSessionsPerRoom === 'number' ? last.maxSessionsPerRoom : 1,
   };
 }
 
@@ -219,12 +221,15 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
   if (totalSeats < totalStudents) {
     throw new Error(`Not enough seats. Students: ${totalStudents}, Seats: ${totalSeats}`);
   }
+  let placedCount = 0;
+  const placedPerSession = new Map();
   const plans = [];
   const generatedAt = new Date().toISOString();
 
-  for (const room of rooms) {
-    const grid = new SeatGrid(String(room._id), room.rows, room.columns);
 
+  for (let roomIdx = 0; roomIdx < rooms.length; roomIdx++) {
+    const room = rooms[roomIdx];
+    const grid = new SeatGrid(String(room._id), room.rows, room.columns);
     const iterate = constraints.fillOrder === 'column'
       ? function* byColumn(rows, cols) {
           for (let c = 0; c < cols; c++) {
@@ -240,7 +245,8 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
             }
           }
         };
-
+    // Allow all sessions in every room to avoid starving any session due to over-restriction
+    const allowedSessions = new Set(sessionIds);
     for (const [r, c] of iterate(grid.rows, grid.cols)) {
       const seat = grid.getSeat(r, c);
       const neighbors = grid.getNeighbors(seat);
@@ -249,40 +255,35 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
           .map((n) => n.sessionId)
           .filter((id) => !!id)
       );
-
-      const avoid = constraints.noAdjacentSameSession ? neighborSessions : new Set();
-      const result = pool.takeNext(avoid) || pool.takeNext(new Set());
+      // Only enforce orthogonal adjacency (left/right/front/back)
+      let avoid = constraints.noAdjacentSameSession ? neighborSessions : new Set();
+      let result = pool.takeNext(avoid);
+      if (!result && avoid.size > 0) {
+        // If only one session exists, adjacency cannot be satisfied; allow placement
+        if (sessionIds.length === 1) {
+          result = pool.takeNext(new Set());
+        }
+      }
       if (!result) {
-        // No more students – leave seat empty
         seat.isEmpty = true;
         continue;
       }
-
       const { token } = result;
       seat.sessionId = token.sessionId;
       seat.sectionId = token.sectionId;
       seat.studentId = token.rollNo;
-      
+      placedCount++;
+      placedPerSession.set(token.sessionId, (placedPerSession.get(token.sessionId) || 0) + 1);
       // Generate registration number: SESSION_NAME-ROLLNO (no year prefix)
-      // Format: FALL-001, SPRING-001, etc.
       const sessionData = sessionMap.get(token.sessionId) || { name: 'GEN', year: new Date().getFullYear() };
       const sessionName = sessionData.name;
-      
-      // Normalize session name: uppercase, remove spaces, limit length
-      // Note: Keep the name as-is even if it contains year (e.g., "SPRING2024")
       const sessionNameNormalized = sessionName.toUpperCase().replace(/\s+/g, '').substring(0, 15);
-      const rollNoStr = globalRollNumber.toString().padStart(3, '0'); // Use 3 digits for better readability (001, 002, etc.)
+      const rollNoStr = globalRollNumber.toString().padStart(3, '0');
       seat.registrationNumber = `${sessionNameNormalized}-${rollNoStr}`;
-      
-      // Log first few registration numbers for debugging
       if (globalRollNumber <= 3) {
         console.log(`Registration number generated: ${seat.registrationNumber} (Session: ${sessionName}, Roll: ${rollNoStr})`);
       }
-      
-      // Increment global counter for next student
-      // This ensures continuous numbering across sections
       globalRollNumber++;
-      
       seat.isEmpty = false;
     }
 
@@ -305,6 +306,16 @@ async function generatePlansForTimeSlot(timeSlotId, roomIds, userId) {
       seats: seatsView,
       generatedAt,
     });
+  }
+
+  if (placedCount !== totalStudents) {
+    const remaining = pool.heap && Array.isArray(pool.heap._heap)
+      ? pool.heap._heap.map((e) => ({ sessionId: e.sessionId, remaining: e.totalRemaining }))
+      : [];
+    console.warn(`Placed ${placedCount}/${totalStudents} students. Remaining in pool:`, remaining);
+    throw new Error(`Generation incomplete: placed ${placedCount} of ${totalStudents} students.`);
+  } else {
+    console.log(`Placed all students: ${placedCount} total`, Array.from(placedPerSession.entries()).map(([sid, count]) => ({ sid, count })));
   }
 
   console.log('generatePlansForTimeSlot completed successfully');

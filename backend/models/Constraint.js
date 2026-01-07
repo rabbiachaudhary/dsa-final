@@ -19,6 +19,9 @@ const ConstraintSchema = new mongoose.Schema({
   alternateSessionsEnabled: { type: Boolean, default: false },
   randomShuffle: { type: Boolean, default: false },
 
+  // Maximum number of different sessions allowed in a single room
+  maxSessionsPerRoom: { type: Number, default: 1 },
+
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   createdAt: { type: Date, default: Date.now }
 });

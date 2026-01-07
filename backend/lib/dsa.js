@@ -174,6 +174,20 @@ class Graph {
 
 // SeatGrid wraps a 2D array of seats and builds a seat adjacency graph
 class SeatGrid {
+    // Get diagonal neighbors for a seat
+    getDiagonalNeighbors(seat) {
+      const deltas = [
+        [-1, -1], [-1, 1], [1, -1], [1, 1]
+      ];
+      const neighbors = [];
+      for (const [dr, dc] of deltas) {
+        const r = seat.row + dr;
+        const c = seat.col + dc;
+        const neighbor = this.getSeat(r, c);
+        if (neighbor) neighbors.push(neighbor);
+      }
+      return neighbors;
+    }
   constructor(roomId, rows, cols) {
     this.roomId = roomId;
     this.rows = rows;

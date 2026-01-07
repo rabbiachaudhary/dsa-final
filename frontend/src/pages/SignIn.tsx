@@ -1,12 +1,11 @@
-
-
-import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { Mail, Lock, Eye, EyeOff, LogIn, GraduationCap } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { login } from "@/lib/api";
 
 export default function SignIn() {
@@ -16,6 +15,25 @@ export default function SignIn() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+
+  const getErrorMessage = (err: unknown): string => {
+    if (typeof err === "string") return err;
+    if (err instanceof Error) return err.message;
+    if (typeof err === "object" && err !== null) {
+      const obj = err as Record<string, unknown>;
+      const response = obj.response;
+      if (typeof response === "object" && response !== null) {
+        const resObj = response as Record<string, unknown>;
+        const data = resObj.data;
+        if (typeof data === "object" && data !== null) {
+          const dataObj = data as Record<string, unknown>;
+          const msg = dataObj.msg;
+          if (typeof msg === "string" && msg.trim().length > 0) return msg;
+        }
+      }
+    }
+    return "Invalid email or password";
+  };
 
   useEffect(() => {
     if (localStorage.getItem("auth")) {
@@ -35,106 +53,105 @@ export default function SignIn() {
       } else {
         setError("Invalid response from server");
       }
-    } catch (err: any) {
-      console.error('Login error:', err);
-      const errorMsg = err?.response?.data?.msg || err?.message || "Invalid email or password";
-      setError(errorMsg);
+    } catch (err: unknown) {
+      console.error("Login error:", err);
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
-              <GraduationCap className="w-6 h-6 text-primary-foreground" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-          <p className="text-gray-600">Sign in to your account</p>
-        </div>
+    <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      {/* Animated background blobs */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 left-1/4 h-96 w-96 animate-pulse rounded-full bg-gradient-to-br from-blue-400/30 to-indigo-400/30 blur-3xl" />
+        <div className="absolute -bottom-40 right-1/4 h-96 w-96 animate-pulse rounded-full bg-gradient-to-br from-purple-400/30 to-pink-400/30 blur-3xl" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/2 left-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-gradient-to-br from-indigo-400/20 to-blue-400/20 blur-3xl" style={{ animationDelay: '4s' }} />
+      </div>
 
-        {/* Form */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+      <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-10">
+        <Link to="/" className="group mb-8 inline-flex items-center justify-center gap-2 text-sm font-semibold text-gray-700 transition-all hover:text-gray-900">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/40 transition-all group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-blue-500/50">D</span>
+          <span className="text-xl">DeskMate</span>
+        </Link>
 
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                Email Address
-              </Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 h-12"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-                Password
-              </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 h-12"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 h-5 w-5 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full h-12 text-lg font-medium gap-2"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                "Signing In..."
-              ) : (
-                <>
-                  <LogIn className="w-5 h-5" />
-                  Sign In
-                </>
+        <Card className="border-white/20 bg-white/70 shadow-2xl backdrop-blur-xl">
+          <CardHeader className="space-y-1 pb-6">
+            <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+            <CardDescription className="text-base">Sign in to manage your exam seating.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-5">{error && (
+                <Alert variant="destructive" className="border-red-200 bg-red-50/80 backdrop-blur-sm">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
               )}
-            </Button>
-          </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{" "}
-              <Link to="/signup" className="text-primary hover:text-primary/80 font-medium">
-                Sign up here
-              </Link>
-            </p>
-          </div>
-        </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-semibold">Email</Label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-11 border-gray-200 bg-white/50 pl-10 backdrop-blur-sm transition-all focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    required
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-semibold">Password</Label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-11 border-gray-200 bg-white/50 pl-10 pr-11 backdrop-blur-sm transition-all focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <Button 
+                type="submit" 
+                className="h-11 w-full gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-base font-semibold shadow-lg shadow-blue-500/30 transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5" 
+                disabled={isLoading}
+              >
+                {isLoading ? "Signing in..." : "Sign in"}
+                {!isLoading && <ArrowRight className="h-5 w-5" />}
+              </Button>
+
+              <p className="text-center text-sm text-gray-600">
+                Don&apos;t have an account?{" "}
+                <Link to="/signup" className="font-semibold text-blue-600 transition-colors hover:text-blue-700 hover:underline">
+                  Create one
+                </Link>
+              </p>
+            </form>
+          </CardContent>
+        </Card>
+
+        <p className="mt-6 text-center text-sm text-gray-500">
+          Intelligent exam seating powered by advanced DSA.
+        </p>
       </div>
     </div>
   );

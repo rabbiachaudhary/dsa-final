@@ -409,14 +409,6 @@ const Generate = () => {
                       <Download className="w-4 h-4" />
                       PDF
                     </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportCsv}>
-                      <Download className="w-4 h-4" />
-                      Excel
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={handlePrintOrPdf}>
-                      <Printer className="w-4 h-4" />
-                      Print
-                    </Button>
                   </div>
                 </div>
               </div>

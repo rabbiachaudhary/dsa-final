@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { Users, DoorOpen, Clock, FileText, Calendar, Download } from 'lucide-react';
+import html2pdf from 'html2pdf.js';
 import { getSessions, getTimeSlots, getRooms } from '@/lib/api';
 import { format } from 'date-fns';
 import { PageHeader } from '@/components/ui/page-header';
@@ -25,27 +26,27 @@ const Reports = () => {
   const reportTypes = [
     {
       title: "Session-wise Student List",
-      description: "Complete list of students organized by session and section",
+      description: "Download a PDF of all students organized by session and section.",
       icon: Users,
-      formats: ['PDF', 'Excel']
+      formats: ['PDF']
     },
     {
       title: "Room Allocation Report",
-      description: "Detailed room allocation with seating capacity utilization",
+      description: "Download a PDF showing room allocation and capacity utilization.",
       icon: DoorOpen,
-      formats: ['PDF', 'Excel']
+      formats: ['PDF']
     },
     {
       title: "Time Slot Schedule",
-      description: "Complete examination schedule with time slots and sessions",
+      description: "Download a PDF of the examination schedule with time slots and sessions.",
       icon: Clock,
       formats: ['PDF']
     },
     {
       title: "Seating Arrangement Report",
-      description: "Full seating arrangement with student placement details",
+      description: "Download a PDF of the full seating arrangement with student placement details.",
       icon: FileText,
-      formats: ['PDF', 'Excel']
+      formats: ['PDF']
     },
   ];
 
@@ -135,23 +136,11 @@ const Reports = () => {
   };
 
   const handleReportClick = (title: string, fmt: string) => {
-    const lower = fmt.toLowerCase();
-    if (lower === 'pdf') {
-      // Use browser print dialog; user can choose "Save as PDF"
-      window.print();
-      return;
-    }
-    // Excel -> CSV exports
-    if (title.includes('Session-wise')) {
-      exportSessionsCsv();
-    } else if (title.includes('Room Allocation')) {
-      exportRoomsCsv();
-    } else if (title.includes('Time Slot Schedule')) {
-      exportScheduleCsv();
-    } else if (title.includes('Seating Arrangement')) {
-      // Reuse schedule CSV as a basic seating arrangement summary
-      exportScheduleCsv();
-    }
+    toast({
+      title: 'Feature coming soon',
+      description: 'This feature will be added in the future.',
+      variant: 'default',
+    });
   };
   return (
     <div className="p-6 lg:p-8 space-y-6 animate-fade-in">
@@ -273,10 +262,14 @@ const Reports = () => {
                         variant="ghost"
                         size="sm"
                         className="gap-1.5"
-                        onClick={exportScheduleCsv}
+                        onClick={() => toast({
+                          title: 'Feature coming soon',
+                          description: 'This feature will be added in the future.',
+                          variant: 'default',
+                        })}
                       >
                         <Download className="w-4 h-4" />
-                        Export
+                        PDF
                       </Button>
                     </td>
                   </tr>

@@ -9,7 +9,9 @@ module.exports = function (req, res, next) {
   }
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Use same fallback secret as in auth.js
+    const secret = process.env.JWT_SECRET || 'fallback_secret';
+    const decoded = jwt.verify(token, secret);
     req.user = decoded.user;
     next();
   } catch (err) {
