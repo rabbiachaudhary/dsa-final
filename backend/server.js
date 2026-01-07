@@ -11,16 +11,22 @@ const corsOptions = {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
-    // List of allowed origins
+    // In development, allow all origins
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    // In production, check allowed origins
     const allowedOrigins = [
       'http://localhost:5173',
       'http://localhost:3000',
       'http://localhost:5174',
-      // Add your Vercel/Netlify URLs here after deployment
       process.env.FRONTEND_URL,
     ].filter(Boolean); // Remove undefined values
     
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+    // If FRONTEND_URL is not set, allow all (for initial deployment)
+    // You can restrict this later by setting FRONTEND_URL
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
